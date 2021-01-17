@@ -1,1 +1,3 @@
-# QR Factorization on NVIDIA GPUs
+# TSQR on TesnorCores
+
+This library provides a TSQR function which works on NVIDIA TensorCores.
