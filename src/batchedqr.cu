@@ -1,11 +1,13 @@
 #include <cstdint>
 #include <cutf/type.hpp>
 #include <cutf/math.hpp>
+#include <cutf/thread.hpp>
 
 namespace {
 
 constexpr unsigned warp_size = 32u;
 
+// This function fills memory with zero
 template <unsigned block_size, unsigned size, class T>
 __device__ void fill_zero(T* const ptr) {
 	if constexpr (size % block_size == 0) {
@@ -51,5 +53,21 @@ __device__ void copy_matrix_g2s(
 			smem[smem_ld * i_n + threadIdx.x] = cutf::type::cast<SMEM_T>(0.0f);
 		}
 	}
+}
+
+// This function computes L2-norm ^2 of a given vector(array).
+// Restrictions:
+// - size % warp_size == 0
+template <class COMPUTE_T, class T>
+__device__ COMPUTE_T compute_norm2(const T* const ptr, const unsigned size) {
+	auto norm2 = cutf::type::cast<COMPUTE_T>(0.0f);
+	for (unsigned i = 0; i < size; i += warp_size) {
+		const auto v = cutf::type::cast<COMPUTE_T>(ptr[i + cutf::thread::get_lane_id()]);
+		norm2 += v * v;
+	}
+	for(auto mask = (warp_size >> 1); mask > 0; mask >>= 1) {
+		norm2 += __shfl_xor_sync(0xffffffff, norm2, mask);
+	}
+	return norm2;
 }
 } // noname namespace
