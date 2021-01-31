@@ -5,7 +5,7 @@ OBJDIR=obj
 LIBDIR=lib
 INCLUDEDIR=include
 
-NVCCFLAGS=-std=c++14
+NVCCFLAGS=-std=c++17
 NVCCFLAGS+=-I./$(SRCDIR)/cutf/include
 NVCCFLAGS+=-I./$(SRCDIR)/wmma_extension/include
 NVCCFLAGS+=-gencode arch=compute_86,code=sm_86
