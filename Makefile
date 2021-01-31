@@ -18,9 +18,9 @@ OBJS=$(SRCS:%.cu=$(OBJDIR)/%.o)
 DLINKOBJS=$(SRCS:%.cu=$(OBJDIR)/%.dlink.oo)
 HEADERS=$(shell find $(INCLUDEDIR) -name '*.cuh' -o -name '*.hpp' -o -name '*.h')
 
-$(TARGET): $(OBJS)
-	echo $(OBJS)
-	$(NVCC) $+ $(NVCCFLAGS) -o $@
+$(LIBDIR)/$(TARGET): $(OBJS)
+	[ -d $(LIBDIR) ] || mkdir $(LIBDIR)
+	$(NVCC) $+ $(NVCCFLAGS) -o $@ -lib
 
 $(OBJDIR)/%.dlink.oo: $(OBJDIR)/%.o
 	$(NVCC) $< $(NVCCFLAGS) -o $@ -dlink
