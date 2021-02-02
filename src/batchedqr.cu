@@ -168,9 +168,9 @@ __device__ void compute_reflection_0_fp32_hmma_cor(
 
 	for (unsigned k = 0; k < num_accumulate; k++) {
 		// Compute (y^t * A)
-		nvcuda::wmma::mma_sync(frag_ytA[k]  , frag_a[k]  , frag_yt[k], frag_ytA  );
-		nvcuda::wmma::mma_sync(frag_d_ytA[k], frag_d_a[k], frag_yt[k], frag_d_ytA);
-		nvcuda::wmma::mma_sync(frag_d_ytA[k], frag_a[k], frag_d_yt[k], frag_d_ytA);
+		nvcuda::wmma::mma_sync(frag_ytA  , frag_a[k]  , frag_yt[k], frag_ytA  );
+		nvcuda::wmma::mma_sync(frag_d_ytA, frag_d_a[k], frag_yt[k], frag_d_ytA);
+		nvcuda::wmma::mma_sync(frag_d_ytA, frag_a[k], frag_d_yt[k], frag_d_ytA);
 	}
 
 	// Store
