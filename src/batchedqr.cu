@@ -236,13 +236,13 @@ __device__ void compute_reflection_1_fp32_hmma_cor(
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode, unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
 __device__ void compute_reflection_1(
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_a_ptr,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_A_ptr,
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_reduction_ptr,
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_y_ptr,
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type t
 		) {
 	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_hmma_cor) {
-		compute_reflection_1_fp32_hmma_cor<smem_m, smem_n, smem_ldm>(smem_a_ptr, smem_reduction_ptr, smem_y_ptr, t);
+		compute_reflection_1_fp32_hmma_cor<smem_m, smem_n, smem_ldm>(smem_A_ptr, smem_reduction_ptr, smem_y_ptr, t);
 	}
 }
 } // noname namespace
