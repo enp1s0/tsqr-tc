@@ -5,8 +5,7 @@
 #include <cutf/thread.hpp>
 #include <wmma_extension.hpp>
 
-#include <tsqr_tc/detail/constant.hpp>
-#include <tsqr_tc/detail/type.hpp>
+#include <tsqr_tc/batchedqr.hpp>
 
 namespace {
 
@@ -222,3 +221,32 @@ __device__ void compute_reflection_1(
 	}
 }
 } // noname namespace
+
+template <mtk::tsqr_tc::compute_mode::type compute_mode>
+void mtk::tsqr_tc::qr256x128(
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_w_ptr, const std::size_t ldw,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_y_ptr, const std::size_t ldy,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_t_ptr,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_a_ptr, const std::size_t lda,
+		const std::size_t m,
+		const std::size_t n) {
+	const unsigned block_size = 256;
+	qr256x128_kernel<compute_mode><<<1, block_size>>>(
+			gmem_w_ptr, ldw,
+			gmem_y_ptr, ldy,
+			gmem_t_ptr,
+			gmem_a_ptr, lda,
+			m, n
+			);
+}
+
+#define QR256X128_INSTANCE(compute_mode) \
+template <> void mtk::tsqr_tc::qr256x128<compute_mode>( \
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, \
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
+		const std::size_t, \
+		const std::size_t)
+
+QR256X128_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_hmma_cor);
