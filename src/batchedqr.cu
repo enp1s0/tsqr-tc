@@ -655,7 +655,7 @@ void mtk::tsqr_tc::qr256x128(
 }
 
 #define QR256X128_INSTANCE(compute_mode) \
-template <> void mtk::tsqr_tc::qr256x128<compute_mode>( \
+template void mtk::tsqr_tc::qr256x128<compute_mode>( \
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, \
