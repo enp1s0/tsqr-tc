@@ -174,4 +174,51 @@ __device__ void compute_reflection_0(
 		compute_reflection_0_fp32_hmma_cor<smem_m, smem_n, smem_ldm>(smem_reduction_ptr, smem_y_ptr, smem_a_ptr);
 	}
 }
+
+// This function computes `A = A -2t * y * tmp`.
+// Restrictions:
+// - smem_m == block_size
+// - smem_n == DIM_BLOCK_N
+template <unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
+__device__ void compute_reflection_1_fp32_hmma_cor(
+		float* const smem_A_ptr,
+		float* const smem_reduction_ptr,
+		const float* const smem_y_ptr,
+		const float t
+		) {
+	constexpr unsigned num_col_block = warp_size / smem_n;
+
+	if (threadIdx.x < smem_n) {
+		smem_reduction_ptr[threadIdx.x] *= -t;
+	}
+
+	nvcuda::wmma::fragment<nvcuda::wmma::matrix_a, smem_n, smem_n, smem_n, half, nvcuda::wmma::col_major> frag_y;
+	nvcuda::wmma::fragment<nvcuda::wmma::matrix_b, smem_n, smem_n, smem_n, half, nvcuda::wmma::row_major> frag_tmp;
+	nvcuda::wmma::fragment<nvcuda::wmma::accumulator, smem_n, smem_n, smem_n, float> frag_A;
+
+	mtk::wmma::fill_fragment(frag_y);
+	__syncthreads();
+	mtk::wmma::make_direct_product_fragment(frag_tmp, smem_reduction_ptr);
+
+	for (unsigned i = 0; i < num_col_block; i++) {
+		mtk::wmma::make_direct_product_fragment(frag_y, smem_y_ptr + i * smem_n + (threadIdx.x & 0xffffffe0u));
+		nvcuda::wmma::load_matrix_sync(frag_A, smem_A_ptr	 + i * smem_n + (threadIdx.x & 0xffffffe0u), smem_ldm);
+
+		nvcuda::wmma::mma_sync(frag_A, frag_tmp, frag_y, frag_A);
+
+		nvcuda::wmma::store_matrix_sync(smem_A_ptr + i * smem_n + (threadIdx.x & 0xffffffe0u), frag_A, smem_ldm);
+	}
+}
+
+template <mtk::tsqr_tc::compute_mode::type compute_mode, unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
+__device__ void compute_reflection_1(
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_a_ptr,
+		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_reduction_ptr,
+		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_y_ptr,
+		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type t
+		) {
+	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_hmma_cor) {
+		compute_reflection_1_fp32_hmma_cor<smem_m, smem_n, smem_ldm>(smem_a_ptr, smem_reduction_ptr, smem_y_ptr, t);
+	}
+}
 } // noname namespace
