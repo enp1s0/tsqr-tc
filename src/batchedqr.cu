@@ -552,24 +552,19 @@ __device__ void qr_kernel(
 	constexpr unsigned block_size = DIM_MAX_M;
 	constexpr unsigned num_warps = block_size / warp_size;
 
-	__shared__ T smem_A[DIM_MAX_M * DIM_BLOCK_N];
-	__shared__ T smem_W[DIM_MAX_M * DIM_BLOCK_N];
-	__shared__ T smem_Y[DIM_MAX_M * DIM_BLOCK_N];
-	__shared__ T smem_t[DIM_BLOCK_N];
-	__shared__ T smem_YtA[DIM_BLOCK_N * DIM_BLOCK_N * num_warps];
-	__shared__ T smem_reduction[DIM_BLOCK_N * num_warps];
+	extern __shared__ T smem[];
 
-	T* const smem_A_ptr = smem_A;
-	T* const smem_W_ptr = smem_W;
-	T* const smem_Y_ptr = smem_Y;
-	T* const smem_t_ptr = smem_t;
-	T* const smem_YtA_ptr = smem_YtA;
-	T* const smem_reduction_ptr = smem_reduction;
+	T* const smem_A_ptr = smem;
+	T* const smem_W_ptr = smem_A_ptr + DIM_MAX_M * DIM_BLOCK_N;
+	T* const smem_Y_ptr = smem_W_ptr + DIM_MAX_M * DIM_BLOCK_N;
+	T* const smem_t_ptr = smem_Y_ptr + DIM_MAX_M * DIM_BLOCK_N;
+	T* const smem_YtA_ptr = smem_t_ptr + DIM_BLOCK_N;
+	T* const smem_reduction_ptr = smem_YtA_ptr + DIM_BLOCK_N * DIM_BLOCK_N * num_warps;
 
 	const unsigned num_n_blocks = (n + DIM_BLOCK_N - 1) / DIM_BLOCK_N;
 	for (std::size_t n_block = 0; n_block < num_n_blocks; n_block++) {
-		fill_zero<block_size, DIM_MAX_M * DIM_BLOCK_N>(smem_W);
-		fill_zero<block_size, DIM_MAX_M * DIM_BLOCK_N>(smem_Y);
+		fill_zero<block_size, DIM_MAX_M * DIM_BLOCK_N>(smem_W_ptr);
+		fill_zero<block_size, DIM_MAX_M * DIM_BLOCK_N>(smem_Y_ptr);
 
 		const unsigned real_block_n = umin(DIM_BLOCK_N, n - DIM_BLOCK_N * n_block);
 		copy_matrix_g2s<block_size, DIM_BLOCK_N, DIM_MAX_M>(smem_A_ptr, gmem_a_ptr + lda * n_block * DIM_BLOCK_N, lda, m, real_block_n);
@@ -660,7 +655,9 @@ void mtk::tsqr_tc::qr256x128(
 		const std::size_t m,
 		const std::size_t n) {
 	const unsigned block_size = 256;
-	qr256x128_kernel<compute_mode><<<1, block_size>>>(
+	const unsigned smem_size = 57920; //[B]
+	cudaFuncSetAttribute(qr256x128_kernel<compute_mode>, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size);
+	qr256x128_kernel<compute_mode><<<1, block_size, smem_size>>>(
 			gmem_w_ptr, ldw,
 			gmem_y_ptr, ldy,
 			gmem_t_ptr,
