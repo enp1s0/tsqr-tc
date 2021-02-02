@@ -521,6 +521,112 @@ __device__ void update_a(
 		update_a_fp32_hmma_cor<smem_m, smem_n, smem_ldm>(smem_A_ptr, smem_YtA_ptr, smem_W_ptr, smem_Y_ptr);
 	}
 }
+
+template <mtk::tsqr_tc::compute_mode::type compute_mode>
+__device__ void qr_kernel(
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_w_ptr, const std::size_t ldw,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_y_ptr, const std::size_t ldy,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_t_ptr,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_a_ptr, const std::size_t lda,
+		const std::size_t m,
+		const std::size_t n
+		) {
+	using T = typename mtk::tsqr_tc::detail::get_type<compute_mode>::type;
+	constexpr unsigned DIM_MAX_M = 256;
+	constexpr unsigned DIM_BLOCK_N = 16;
+	constexpr unsigned block_size = DIM_MAX_M;
+	constexpr unsigned num_warps = block_size / warp_size;
+
+	__shared__ T smem_A[DIM_MAX_M * DIM_BLOCK_N];
+	__shared__ T smem_W[DIM_MAX_M * DIM_BLOCK_N];
+	__shared__ T smem_Y[DIM_MAX_M * DIM_BLOCK_N];
+	__shared__ T smem_t[DIM_BLOCK_N];
+	__shared__ T smem_YtA[DIM_BLOCK_N * DIM_BLOCK_N * num_warps];
+	__shared__ T smem_reduction[DIM_BLOCK_N * num_warps];
+
+	const unsigned num_n_blocks = (n + DIM_BLOCK_N - 1) / DIM_BLOCK_N;
+	for (std::size_t n_block = 0; n_block < num_n_blocks; n_block++) {
+		fill_zero<block_size, DIM_MAX_M * DIM_BLOCK_N>(smem_W);
+		fill_zero<block_size, DIM_MAX_M * DIM_BLOCK_N>(smem_Y);
+
+		const unsigned real_block_n = umin(DIM_BLOCK_N, n - DIM_BLOCK_N * n_block);
+		copy_matrix_g2s<block_size, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_A, gmem_a_ptr + lda * n_block * DIM_BLOCK_N, lda, m, real_block_n);
+
+		for (unsigned sn = 0; sn < real_block_n; sn++) {
+			const auto gn = n_block * DIM_BLOCK_N + sn;
+
+			// Copy y from A
+			if (threadIdx.x >= gn) {
+				const auto index = DIM_MAX_M * sn + threadIdx.x;
+				smem_Y[index] = smem_A[index];
+			}
+			__syncthreads();
+
+			// Compute norm2 of y and update y (y_i <- y_i +- norm(y);
+			if (cutf::thread::get_warp_id() == gn / warp_size) {
+				const auto norm2 = cutf::type::cast<T>(compute_norm2<float>(smem_Y + DIM_MAX_M * sn, DIM_MAX_M));
+				if (cutf::thread::get_lane_id() == sn) {
+					const auto norm = cutf::math::sqrt(norm2);
+					const auto y_i = smem_Y[DIM_MAX_M * sn + threadIdx.x];
+					smem_Y[DIM_MAX_M * sn] = y_i + cutf::math::sign(y_i) * norm;
+				}
+			}
+			__syncthreads();
+
+			// Compute norm2 of y
+			// TODO: Compute it from previous norm2
+			const auto t = cutf::type::cast<T>(2.0f / compute_norm2<float>(smem_Y + DIM_MAX_M * sn));
+			if (sn == threadIdx.x) {
+				smem_t[sn] = t;
+			}
+			
+			// Compute ytA
+			compute_reflection_0<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_reduction, smem_Y + DIM_MAX_M * sn, smem_A);
+
+			// Compute R
+			compute_reflection_1<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_A, smem_reduction, smem_Y + DIM_MAX_M * sn, t);
+
+			// Compute W
+			if (sn == 0) {
+				smem_W[threadIdx.x] = smem_Y[threadIdx.x] * t;
+			} else {
+				compute_w<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_W + DIM_MAX_M * sn, smem_reduction, smem_Y + DIM_MAX_M * sn, smem_Y, smem_W, t);
+			}
+		}
+		// Store block A, W, Y, t to global memory
+		copy_matrix_s2g<block_size, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(gmem_a_ptr + lda * n_block * DIM_BLOCK_N, lda, smem_A, m, real_block_n);
+		copy_matrix_s2g<block_size, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(gmem_w_ptr + ldw * n_block * DIM_BLOCK_N, ldw, smem_W, m, real_block_n);
+		copy_matrix_s2g<block_size, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(gmem_y_ptr + ldy * n_block * DIM_BLOCK_N, ldy, smem_Y, m, real_block_n);
+		if (threadIdx.x < DIM_BLOCK_N) {
+			gmem_t_ptr[n_block * DIM_BLOCK_N + threadIdx.x] = smem_t[threadIdx.x];
+		}
+
+		// Update A
+		for (std::size_t sub_n_block = n_block + 1; sub_n_block < num_n_blocks; sub_n_block++) {
+			const unsigned real_block_n = umin(DIM_BLOCK_N, n - DIM_BLOCK_N * sub_n_block);
+			copy_matrix_g2s<block_size, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_A, gmem_a_ptr + lda * sub_n_block * DIM_BLOCK_N, lda, m, real_block_n);
+			update_a<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_A, smem_YtA, smem_W, smem_Y);
+			copy_matrix_s2g<block_size, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(gmem_a_ptr + lda * sub_n_block * DIM_BLOCK_N, lda, smem_A, m, real_block_n);
+		}
+	}
+}
+
+template <mtk::tsqr_tc::compute_mode::type compute_mode>
+__global__ void qr256x128_kernel(
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_w_ptr, const std::size_t ldw,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_y_ptr, const std::size_t ldy,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_t_ptr,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_a_ptr, const std::size_t lda,
+		const std::size_t m,
+		const std::size_t n) {
+	qr_kernel<compute_mode>(
+			gmem_w_ptr, ldw,
+			gmem_y_ptr, ldy,
+			gmem_t_ptr,
+			gmem_a_ptr, lda,
+			m, n
+			);
+}
 } // noname namespace
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
