@@ -3,6 +3,7 @@ NVCC=nvcc
 SRCDIR=src
 OBJDIR=obj
 LIBDIR=lib
+TESTDIR=test
 INCLUDEDIR=include
 
 NVCCFLAGS=-std=c++17
@@ -18,6 +19,8 @@ OBJS=$(SRCS:%.cu=$(OBJDIR)/%.o)
 DLINKOBJS=$(SRCS:%.cu=$(OBJDIR)/%.dlink.oo)
 HEADERS=$(shell find $(INCLUDEDIR) -name '*.cuh' -o -name '*.hpp' -o -name '*.h')
 
+all: $(LIBDIR)/$(TARGET) tests
+
 $(LIBDIR)/$(TARGET): $(OBJS)
 	[ -d $(LIBDIR) ] || mkdir $(LIBDIR)
 	$(NVCC) $+ $(NVCCFLAGS) -o $@ -lib
@@ -32,3 +35,7 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.cu  $(HEADERS)
 clean:
 	rm -f $(OBJDIR)/*
 	rm -f $(LIBDIR)/*
+	cd $(TESTDIR);make clean
+
+tests:
+	cd $(TESTDIR);make
