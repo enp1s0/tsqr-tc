@@ -98,7 +98,7 @@ __device__ void accumulate_vectors(T* const smem_vec_ptr, const unsigned vec_len
 // - smem_m == block_size
 // - smem_n == DIM_BLOCK_N
 template <unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
-__device__ void compute_ytA_fp32_hmma_cor(
+__device__ void compute_reflection_0_fp32_hmma_cor(
 		float* const smem_reduction,
 		const float* const smem_y,
 		const float* const smem_A
@@ -162,13 +162,13 @@ __device__ void compute_ytA_fp32_hmma_cor(
 }
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode, unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
-__device__ void compute_ytA(
+__device__ void compute_reflection_0(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_reduction_ptr,
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_y_ptr,
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_a_ptr
 		) {
 	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_hmma_cor) {
-		compute_ytA_fp32_hmma_cor<smem_m, smem_n, smem_ldm>(smem_reduction_ptr, smem_y_ptr, smem_a_ptr);
+		compute_reflection_0_fp32_hmma_cor<smem_m, smem_n, smem_ldm>(smem_reduction_ptr, smem_y_ptr, smem_a_ptr);
 	}
 }
 } // noname namespace
