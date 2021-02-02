@@ -112,7 +112,7 @@ __device__ void compute_reflection_0_fp32_hmma_cor(
 	mtk::wmma::fill_zero(frag_d_ytA);
 
 	// Load A
-	mtk::wmma::foreach<decltype(frag_a[0])>([&](const unsigned frag_index, const unsigned mem_index) {
+	mtk::wmma::foreach<decltype(frag_a[0])>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
 				const auto offset = (mem_index / smem_n) * smem_ldm;
 				const auto row = mem_index % smem_n + (threadIdx.x & 0xffffffe0u);
 				for (unsigned k = 0; k < num_accumulate; k++) {
@@ -120,8 +120,11 @@ __device__ void compute_reflection_0_fp32_hmma_cor(
 					const auto v = smem_A[offset + r];
 					const auto hv = cutf::type::cast<half>(v);
 					const auto dhv = cutf::type::cast<half>((v - cutf::type::cast<float>(hv)) * cor_scale);
-					frag_a[k].x[frag_index] = hv;
-					frag_d_a[k].x[frag_index] = dhv;
+					for (unsigned i = 0; i < frag_index_count; i++) {
+					const unsigned frag_index = frag_index_list[i];
+						frag_a[k].x[frag_index] = hv;
+						frag_d_a[k].x[frag_index] = dhv;
+					}
 				}
 			});
 	mtk::wmma::foreach_v<decltype(frag_yt[0])>(
