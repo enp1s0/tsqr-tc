@@ -3,7 +3,7 @@ NVCC=nvcc
 INCDIR=../include
 LIBDIR=../lib
 
-NVCCFLAGS=-std=c++17 -I$(INCDIR) -L$(LIBDIR) -ltsqr-tc -I../src/cutf/include
+NVCCFLAGS=-std=c++17 -I$(INCDIR) -L$(LIBDIR) -ltsqr-tc -I../src/cutf/include -Xcompiler="-fopenmp"
 
 TARGET=qr256x128.test
 
