@@ -544,13 +544,20 @@ __device__ void qr_kernel(
 	__shared__ T smem_YtA[DIM_BLOCK_N * DIM_BLOCK_N * num_warps];
 	__shared__ T smem_reduction[DIM_BLOCK_N * num_warps];
 
+	T* const smem_A_ptr = smem_A;
+	T* const smem_W_ptr = smem_W;
+	T* const smem_Y_ptr = smem_Y;
+	T* const smem_t_ptr = smem_t;
+	T* const smem_YtA_ptr = smem_Y;
+	T* const smem_reduction_ptr = smem_reduction;
+
 	const unsigned num_n_blocks = (n + DIM_BLOCK_N - 1) / DIM_BLOCK_N;
 	for (std::size_t n_block = 0; n_block < num_n_blocks; n_block++) {
 		fill_zero<block_size, DIM_MAX_M * DIM_BLOCK_N>(smem_W);
 		fill_zero<block_size, DIM_MAX_M * DIM_BLOCK_N>(smem_Y);
 
 		const unsigned real_block_n = umin(DIM_BLOCK_N, n - DIM_BLOCK_N * n_block);
-		copy_matrix_g2s<block_size, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_A, gmem_a_ptr + lda * n_block * DIM_BLOCK_N, lda, m, real_block_n);
+		copy_matrix_g2s<block_size, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_A_ptr, gmem_a_ptr + lda * n_block * DIM_BLOCK_N, lda, m, real_block_n);
 
 		for (unsigned sn = 0; sn < real_block_n; sn++) {
 			const auto gn = n_block * DIM_BLOCK_N + sn;
@@ -558,55 +565,55 @@ __device__ void qr_kernel(
 			// Copy y from A
 			if (threadIdx.x >= gn) {
 				const auto index = DIM_MAX_M * sn + threadIdx.x;
-				smem_Y[index] = smem_A[index];
+				smem_Y_ptr[index] = smem_A_ptr[index];
 			}
 			__syncthreads();
 
 			// Compute norm2 of y and update y (y_i <- y_i +- norm(y);
 			if (cutf::thread::get_warp_id() == gn / warp_size) {
-				const auto norm2 = cutf::type::cast<T>(compute_norm2<float>(smem_Y + DIM_MAX_M * sn, DIM_MAX_M));
+				const auto norm2 = cutf::type::cast<T>(compute_norm2<float>(smem_Y_ptr + DIM_MAX_M * sn, DIM_MAX_M));
 				if (cutf::thread::get_lane_id() == sn) {
 					const auto norm = cutf::math::sqrt(norm2);
-					const auto y_i = smem_Y[DIM_MAX_M * sn + threadIdx.x];
-					smem_Y[DIM_MAX_M * sn] = y_i + cutf::math::sign(y_i) * norm;
+					const auto y_i = smem_Y_ptr[DIM_MAX_M * sn + threadIdx.x];
+					smem_Y_ptr[DIM_MAX_M * sn] = y_i + cutf::math::sign(y_i) * norm;
 				}
 			}
 			__syncthreads();
 
 			// Compute norm2 of y
 			// TODO: Compute it from previous norm2
-			const auto t = cutf::type::cast<T>(2.0f / compute_norm2<float>(smem_Y + DIM_MAX_M * sn));
+			const auto t = cutf::type::cast<T>(2.0f / compute_norm2<float>(smem_Y_ptr + DIM_MAX_M * sn));
 			if (sn == threadIdx.x) {
-				smem_t[sn] = t;
+				smem_t_ptr[sn] = t;
 			}
 			
 			// Compute ytA
-			compute_reflection_0<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_reduction, smem_Y + DIM_MAX_M * sn, smem_A);
+			compute_reflection_0<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_reduction_ptr, smem_Y_ptr + DIM_MAX_M * sn, smem_A_ptr);
 
 			// Compute R
-			compute_reflection_1<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_A, smem_reduction, smem_Y + DIM_MAX_M * sn, t);
+			compute_reflection_1<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_A_ptr, smem_reduction_ptr, smem_Y_ptr + DIM_MAX_M * sn, t);
 
 			// Compute W
 			if (sn == 0) {
-				smem_W[threadIdx.x] = smem_Y[threadIdx.x] * t;
+				smem_W_ptr[threadIdx.x] = smem_Y_ptr[threadIdx.x] * t;
 			} else {
-				compute_w<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_W + DIM_MAX_M * sn, smem_reduction, smem_Y + DIM_MAX_M * sn, smem_Y, smem_W, t);
+				compute_w<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_W_ptr + DIM_MAX_M * sn, smem_reduction_ptr, smem_Y_ptr + DIM_MAX_M * sn, smem_Y_ptr, smem_W_ptr, t);
 			}
 		}
 		// Store block A, W, Y, t to global memory
-		copy_matrix_s2g<block_size, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(gmem_a_ptr + lda * n_block * DIM_BLOCK_N, lda, smem_A, m, real_block_n);
-		copy_matrix_s2g<block_size, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(gmem_w_ptr + ldw * n_block * DIM_BLOCK_N, ldw, smem_W, m, real_block_n);
-		copy_matrix_s2g<block_size, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(gmem_y_ptr + ldy * n_block * DIM_BLOCK_N, ldy, smem_Y, m, real_block_n);
+		copy_matrix_s2g<block_size, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(gmem_a_ptr + lda * n_block * DIM_BLOCK_N, lda, smem_A_ptr, m, real_block_n);
+		copy_matrix_s2g<block_size, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(gmem_w_ptr + ldw * n_block * DIM_BLOCK_N, ldw, smem_W_ptr, m, real_block_n);
+		copy_matrix_s2g<block_size, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(gmem_y_ptr + ldy * n_block * DIM_BLOCK_N, ldy, smem_Y_ptr, m, real_block_n);
 		if (threadIdx.x < DIM_BLOCK_N) {
-			gmem_t_ptr[n_block * DIM_BLOCK_N + threadIdx.x] = smem_t[threadIdx.x];
+			gmem_t_ptr[n_block * DIM_BLOCK_N + threadIdx.x] = smem_t_ptr[threadIdx.x];
 		}
 
 		// Update A
 		for (std::size_t sub_n_block = n_block + 1; sub_n_block < num_n_blocks; sub_n_block++) {
 			const unsigned real_block_n = umin(DIM_BLOCK_N, n - DIM_BLOCK_N * sub_n_block);
-			copy_matrix_g2s<block_size, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_A, gmem_a_ptr + lda * sub_n_block * DIM_BLOCK_N, lda, m, real_block_n);
-			update_a<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_A, smem_YtA, smem_W, smem_Y);
-			copy_matrix_s2g<block_size, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(gmem_a_ptr + lda * sub_n_block * DIM_BLOCK_N, lda, smem_A, m, real_block_n);
+			copy_matrix_g2s<block_size, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_A_ptr, gmem_a_ptr + lda * sub_n_block * DIM_BLOCK_N, lda, m, real_block_n);
+			update_a<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_A_ptr, smem_YtA_ptr, smem_W_ptr, smem_Y_ptr);
+			copy_matrix_s2g<block_size, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(gmem_a_ptr + lda * sub_n_block * DIM_BLOCK_N, lda, smem_A_ptr, m, real_block_n);
 		}
 	}
 }
