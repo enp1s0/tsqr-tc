@@ -3,7 +3,8 @@ NVCC=nvcc
 INCDIR=../include
 LIBDIR=../lib
 
-NVCCFLAGS=-std=c++17 -I$(INCDIR) -L$(LIBDIR) -ltsqr-tc -I../src/cutf/include -Xcompiler="-fopenmp"
+NVCCFLAGS=-std=c++17 -I$(INCDIR) -L$(LIBDIR) -ltsqr-tc -I../src/cutf/include -Xcompiler="-fopenmp" -lcublas
+NVCCFLAGS+=-gencode arch=compute_86,code=sm_86
 
 TARGET=qr256x128.test
 
