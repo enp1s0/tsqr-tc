@@ -7,7 +7,7 @@
 
 #include <tsqr_tc/batchedqr.hpp>
 
-#define MTK_DEBUG
+//#define MTK_DEBUG
 #ifdef MTK_DEBUG
 #include <cutf/debug/matrix.hpp>
 #define MTK_DEBUG_PRINT_MATRIX(ptr, m, n, ldm, name) \
@@ -19,7 +19,7 @@
 	if (threadIdx.x == 0) func; \
 	__syncthreads();
 #else
-#define MTK_DEBUG_PRINT_MATRIX(ptr, m, n, name)
+#define MTK_DEBUG_PRINT_MATRIX(ptr, m, n, ldm, name)
 #define MTK_DEBUG_CALL_FUNC(func);
 #endif
 
