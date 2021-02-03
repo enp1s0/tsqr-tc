@@ -7,6 +7,22 @@
 
 #include <tsqr_tc/batchedqr.hpp>
 
+#define MTK_DEBUG
+#ifdef MTK_DEBUG
+#include <cutf/debug/matrix.hpp>
+#define MTK_DEBUG_PRINT_MATRIX(ptr, m, n, ldm, name) \
+	__syncthreads(); \
+	if (threadIdx.x == 0) cutf::debug::print::print_matrix(ptr, m, n, ldm, name); \
+	__syncthreads();
+#define MTK_DEBUG_CALL_FUNC(func) \
+	__syncthreads(); \
+	if (threadIdx.x == 0) func; \
+	__syncthreads();
+#else
+#define MTK_DEBUG_PRINT_MATRIX(ptr, m, n, name)
+#define MTK_DEBUG_CALL_FUNC(func);
+#endif
+
 namespace {
 
 constexpr unsigned warp_size = 32u;
@@ -393,9 +409,11 @@ __device__ void compute_w(
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_W_ptr,
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type t
 		) {
+	MTK_DEBUG_CALL_FUNC(printf("# --> %s\n", __func__));
 	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_hmma_cor) {
 		compute_w_fp32_hmma_cor<smem_m, smem_n, smem_ldm>(smem_w_ptr, smem_reduction_ptr, smem_y_ptr, smem_Y_ptr, smem_W_ptr, t);
 	}
+	MTK_DEBUG_CALL_FUNC(printf("# <-- %s\n", __func__));
 }
 
 // This function computes `A <- (I - W * Y^T)A`.
@@ -568,7 +586,10 @@ __device__ void qr_kernel(
 		const unsigned real_block_n = umin(DIM_BLOCK_N, n - DIM_BLOCK_N * n_block);
 		copy_matrix_g2s<block_size, DIM_BLOCK_N, DIM_MAX_M>(smem_A_ptr, gmem_a_ptr + lda * n_block * DIM_BLOCK_N, lda, m, real_block_n);
 
+		MTK_DEBUG_PRINT_MATRIX(smem_A_ptr, m, DIM_BLOCK_N, DIM_MAX_M, "Input A");
+
 		for (unsigned sn = 0; sn < real_block_n; sn++) {
+			MTK_DEBUG_CALL_FUNC(printf("----- small n : %u\n", sn));
 			const auto gn = n_block * DIM_BLOCK_N + sn;
 
 			// Copy y from A
@@ -577,6 +598,7 @@ __device__ void qr_kernel(
 				smem_Y_ptr[index] = smem_A_ptr[index];
 			}
 			__syncthreads();
+			MTK_DEBUG_PRINT_MATRIX(smem_Y_ptr + DIM_MAX_M * sn, 1, m, 1, "y (loaded)");
 
 			// Compute norm2 of y and update y (y_i <- y_i +- norm(y);
 			if (cutf::thread::get_warp_id() == gn / warp_size) {
@@ -588,6 +610,7 @@ __device__ void qr_kernel(
 				}
 			}
 			__syncthreads();
+			MTK_DEBUG_PRINT_MATRIX(smem_Y_ptr + DIM_MAX_M * sn, 1, m, 1, "y (|y| added)");
 
 			// Compute norm2 of y
 			// TODO: Compute it from previous norm2
