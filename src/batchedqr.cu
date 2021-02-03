@@ -541,7 +541,6 @@ template <mtk::tsqr_tc::compute_mode::type compute_mode>
 __device__ void qr_kernel(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_w_ptr, const std::size_t ldw,
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_y_ptr, const std::size_t ldy,
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_t_ptr,
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_a_ptr, const std::size_t lda,
 		const std::size_t m,
 		const std::size_t n
@@ -614,9 +613,6 @@ __device__ void qr_kernel(
 		copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_a_ptr + lda * n_block * DIM_BLOCK_N, lda, smem_A_ptr, m, real_block_n);
 		copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_w_ptr + ldw * n_block * DIM_BLOCK_N, ldw, smem_W_ptr, m, real_block_n);
 		copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_y_ptr + ldy * n_block * DIM_BLOCK_N, ldy, smem_Y_ptr, m, real_block_n);
-		if (threadIdx.x < DIM_BLOCK_N) {
-			gmem_t_ptr[n_block * DIM_BLOCK_N + threadIdx.x] = smem_t_ptr[threadIdx.x];
-		}
 
 		// Update A
 		for (std::size_t sub_n_block = n_block + 1; sub_n_block < num_n_blocks; sub_n_block++) {
@@ -632,14 +628,12 @@ template <mtk::tsqr_tc::compute_mode::type compute_mode>
 __global__ void qr256x128_kernel(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_w_ptr, const std::size_t ldw,
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_y_ptr, const std::size_t ldy,
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_t_ptr,
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_a_ptr, const std::size_t lda,
 		const std::size_t m,
 		const std::size_t n) {
 	qr_kernel<compute_mode>(
 			gmem_w_ptr, ldw,
 			gmem_y_ptr, ldy,
-			gmem_t_ptr,
 			gmem_a_ptr, lda,
 			m, n
 			);
@@ -650,7 +644,6 @@ template <mtk::tsqr_tc::compute_mode::type compute_mode>
 void mtk::tsqr_tc::qr256x128(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_w_ptr, const std::size_t ldw,
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_y_ptr, const std::size_t ldy,
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_t_ptr,
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_a_ptr, const std::size_t lda,
 		const std::size_t m,
 		const std::size_t n) {
@@ -660,7 +653,6 @@ void mtk::tsqr_tc::qr256x128(
 	qr256x128_kernel<compute_mode><<<1, block_size, smem_size>>>(
 			gmem_w_ptr, ldw,
 			gmem_y_ptr, ldy,
-			gmem_t_ptr,
 			gmem_a_ptr, lda,
 			m, n
 			);
@@ -670,7 +662,6 @@ void mtk::tsqr_tc::qr256x128(
 template void mtk::tsqr_tc::qr256x128<compute_mode>( \
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, \
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
 		const std::size_t, \
 		const std::size_t)
