@@ -7,11 +7,15 @@ NVCCFLAGS=-std=c++17 -I$(INCDIR) -L$(LIBDIR) -ltsqr-tc -I../src/cutf/include -Xc
 NVCCFLAGS+=-gencode arch=compute_86,code=sm_86
 
 TARGET=qr256x128.test
+OBJS=utils.o
 
 all: $(TARGET)
 
-%.test:%.cu $(LIBDIR)/libtsqr-tc.a
-	$(NVCC) $< $(NVCCFLAGS) -o $@
+%.test:%.cu $(OBJS) $(LIBDIR)/libtsqr-tc.a
+	$(NVCC) $< $(OBJS) $(NVCCFLAGS) -o $@
+
+%.o:%.cu
+	$(NVCC) $< $(NVCCFLAGS) -c -o $@
 
 clean:
 	rm -f *.test
