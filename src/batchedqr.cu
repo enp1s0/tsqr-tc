@@ -388,7 +388,7 @@ __device__ void compute_w_fp32_hmma_cor(
 		mtk::wmma::foreach_v<decltype(frag_w[0])>(nvcuda::wmma::mem_row_major,
 				[&](const unsigned* frag_index_list, const unsigned fragment_index_count, const unsigned mem_index) {
 					for (unsigned k = 0; k < num_col_block; k++) {
-						const auto offset = warp_size * (threadIdx.x >> 5) + k * smem_n;
+						const auto offset = (threadIdx.x & 0xffffffe0u) + k * smem_n;
 						float* const res_ptr = smem_w_ptr + offset;
 						const float* const y_ptr = smem_y_ptr + offset;
 						for (unsigned i = 0; i < fragment_index_count; i++) {
@@ -605,8 +605,9 @@ __device__ void qr_kernel(
 				const auto norm2 = cutf::type::cast<T>(compute_norm2<float>(smem_Y_ptr + DIM_MAX_M * sn, DIM_MAX_M));
 				if (cutf::thread::get_lane_id() == sn) {
 					const auto norm = cutf::math::sqrt(norm2);
-					const auto y_i = smem_Y_ptr[DIM_MAX_M * sn + threadIdx.x];
-					smem_Y_ptr[DIM_MAX_M * sn] = y_i + cutf::math::sign(y_i) * norm;
+					const auto y_offset = sn * DIM_MAX_M + gn;
+					const auto y_i = smem_Y_ptr[y_offset];
+					smem_Y_ptr[y_offset] = y_i + cutf::math::sign(y_i) * norm;
 				}
 			}
 			__syncthreads();
