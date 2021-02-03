@@ -14,6 +14,11 @@ double compute_residual_in_dp(
 		const std::size_t m, const std::size_t n,
 		cublasHandle_t const cublas_handle
 		);
+
+template <class T>
+double compute_orthogonality_in_dp(
+		const T* const dW_ptr, const std::size_t ld_W,
+		const T* const dY_ptr, const std::size_t ld_Y,
 		const std::size_t m, const std::size_t n,
 		cublasHandle_t const cublas_handle
 		);
