@@ -341,8 +341,10 @@ __device__ void compute_w_fp32_hmma_cor(
 	}
 
 	// Accumulate
+	MTK_DEBUG_PRINT_MATRIX(smem_reduction_ptr, 1, smem_n, 1, "Yty (before accumulating)");
 	__syncthreads();
 	accumulate_vectors<smem_m>(smem_reduction_ptr, smem_n);
+	MTK_DEBUG_PRINT_MATRIX(smem_reduction_ptr, 1, smem_n, 1, "Yty (accumulated)");
 
 	// Compute w <- W * tmp
 	{
@@ -397,6 +399,7 @@ __device__ void compute_w_fp32_hmma_cor(
 						}
 					}
 				});
+		MTK_DEBUG_PRINT_MATRIX(smem_w_ptr, 1, smem_n, 1, "w");
 	}
 }
 
@@ -584,10 +587,10 @@ __device__ void qr_kernel(
 		const unsigned real_block_n = umin(DIM_BLOCK_N, n - DIM_BLOCK_N * n_block);
 		copy_matrix_g2s<block_size, DIM_BLOCK_N, DIM_MAX_M>(smem_A_ptr, gmem_a_ptr + lda * n_block * DIM_BLOCK_N, lda, m, real_block_n);
 
-		MTK_DEBUG_PRINT_MATRIX(smem_A_ptr, m, DIM_BLOCK_N, DIM_MAX_M, "Input A");
 
 		for (unsigned sn = 0; sn < real_block_n; sn++) {
-			MTK_DEBUG_CALL_FUNC(printf("----- small n : %u\n", sn));
+			MTK_DEBUG_CALL_FUNC(printf("----------\n----- small n : %u\n----------\n", sn));
+			MTK_DEBUG_PRINT_MATRIX(smem_A_ptr, m, real_block_n, DIM_MAX_M, "Input A");
 			const auto gn = n_block * DIM_BLOCK_N + sn;
 
 			// Copy y from A
@@ -597,7 +600,7 @@ __device__ void qr_kernel(
 				smem_y_ptr[threadIdx.x] = smem_A_ptr[index];
 			}
 			__syncthreads();
-			MTK_DEBUG_PRINT_MATRIX(smem_Y_ptr + DIM_MAX_M * sn, 1, m, 1, "y (loaded)");
+			MTK_DEBUG_PRINT_MATRIX(smem_y_ptr, 1, m, 1, "y (loaded)");
 
 			// Compute norm2 of y and update y (y_i <- y_i +- norm(y);
 			if (cutf::thread::get_warp_id() == gn / warp_size) {
@@ -609,14 +612,12 @@ __device__ void qr_kernel(
 				}
 			}
 			__syncthreads();
-			MTK_DEBUG_PRINT_MATRIX(smem_Y_ptr + DIM_MAX_M * sn, 1, m, 1, "y (|y| added)");
+			MTK_DEBUG_PRINT_MATRIX(smem_y_ptr, 1, m, 1, "y (|y| added)");
 
 			// Compute norm2 of y
 			// TODO: Compute it from previous norm2
-			const auto t = cutf::type::cast<T>(2.0f / compute_norm2<float>(smem_Y_ptr + DIM_MAX_M * sn, DIM_MAX_M));
-			if (sn == threadIdx.x) {
-				smem_t_ptr[sn] = t;
-			}
+			const auto t = cutf::type::cast<T>(2.0f / compute_norm2<float>(smem_y_ptr, DIM_MAX_M));
+			MTK_DEBUG_CALL_FUNC(printf("t = %e\n", t));
 			
 			// Compute ytA
 			compute_reflection_0<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_tmp_ptr, smem_y_ptr, smem_A_ptr);
