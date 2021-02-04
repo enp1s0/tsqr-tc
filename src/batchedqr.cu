@@ -201,7 +201,9 @@ __device__ void compute_reflection_0_fp32_hmma_cor(
 
 	// Accumulate
 	__syncthreads();
+	MTK_DEBUG_PRINT_MATRIX(smem_reduction, 1, smem_m, 1, "tmp (before accumulating)");
 	accumulate_vectors<smem_m>(smem_reduction, smem_n);
+	MTK_DEBUG_PRINT_MATRIX(smem_reduction, 1, smem_m, 1, "tmp (accumulated)");
 }
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode, unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
@@ -210,9 +212,11 @@ __device__ void compute_reflection_0(
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_y_ptr,
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_a_ptr
 		) {
+	MTK_DEBUG_CALL_FUNC(printf("# --> %s\n", __func__));
 	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_hmma_cor) {
 		compute_reflection_0_fp32_hmma_cor<smem_m, smem_n, smem_ldm>(smem_reduction_ptr, smem_y_ptr, smem_a_ptr);
 	}
+	MTK_DEBUG_CALL_FUNC(printf("# <-- %s\n", __func__));
 }
 
 // This function computes `A = A -2t * y * tmp`.
@@ -257,9 +261,11 @@ __device__ void compute_reflection_1(
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_y_ptr,
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type t
 		) {
+	MTK_DEBUG_CALL_FUNC(printf("# --> %s\n", __func__));
 	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_hmma_cor) {
 		compute_reflection_1_fp32_hmma_cor<smem_m, smem_n, smem_ldm>(smem_A_ptr, smem_reduction_ptr, smem_y_ptr, t);
 	}
+	MTK_DEBUG_CALL_FUNC(printf("# <-- %s\n", __func__));
 }
 
 // This function computes `w = (I - W * Y^t)y`.
