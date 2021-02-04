@@ -12,7 +12,7 @@
 #include <cutf/debug/matrix.hpp>
 #define MTK_DEBUG_PRINT_MATRIX(ptr, m, n, ldm, name) \
 	__syncthreads(); \
-	if (threadIdx.x == 0) cutf::debug::print::print_matrix(ptr, m, n, ldm, name); \
+	if (threadIdx.x == 0) cutf::debug::print::print_numpy_matrix(ptr, m, n, ldm, name); \
 	__syncthreads();
 #define MTK_DEBUG_CALL_FUNC(func) \
 	__syncthreads(); \
