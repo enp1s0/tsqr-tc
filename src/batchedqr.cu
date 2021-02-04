@@ -125,7 +125,7 @@ __device__ void accumulate_vectors(T* const smem_vec_ptr, const unsigned vec_len
 	for (unsigned whole_vec_len = vec_len * block_size / warp_size; whole_vec_len > vec_len; whole_vec_len >>= 1) {
 		for (unsigned offset = 0; offset < whole_vec_len / 2; offset += block_size) {
 			const auto index = offset + threadIdx.x;
-			if (index > vec_len) break;
+			if (index > whole_vec_len / 2) break;
 
 			smem_vec_ptr[index] += smem_vec_ptr[index + whole_vec_len / 2];
 		}
