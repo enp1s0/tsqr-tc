@@ -382,9 +382,9 @@ __device__ void compute_w_fp32_hmma_cor(
 			mtk::wmma::fill_zero(frag_w[k]);
 			mtk::wmma::fill_zero(frag_d_w[k]);
 			// Compute (Yt * A)
-			nvcuda::wmma::mma_sync(frag_w[k]  , frag_W[k]  , frag_y[k]  , frag_w[k]  );
-			nvcuda::wmma::mma_sync(frag_d_w[k], frag_d_W[k], frag_y[k]  , frag_d_w[k]);
-			nvcuda::wmma::mma_sync(frag_d_w[k], frag_W[k]  , frag_d_y[k], frag_d_w[k]);
+			nvcuda::wmma::mma_sync(frag_w[k]  , frag_W[k]  , frag_y[0]  , frag_w[k]  );
+			nvcuda::wmma::mma_sync(frag_d_w[k], frag_d_W[k], frag_y[0]  , frag_d_w[k]);
+			nvcuda::wmma::mma_sync(frag_d_w[k], frag_W[k]  , frag_d_y[0], frag_d_w[k]);
 		}
 		// Store
 		mtk::wmma::foreach_v<decltype(frag_w[0])>(nvcuda::wmma::mem_col_major,
