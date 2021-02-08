@@ -684,9 +684,9 @@ __global__ void qr256x128_batched_kernel(
 	const auto end_m = start_m_list[matrix_id + 1];
 	const auto m = end_m - start_m;
 	qr_kernel<compute_mode>(
-			gmem_w_ptr, ldw,
-			gmem_y_ptr, ldy,
-			gmem_a_ptr, lda,
+			gmem_w_ptr + start_m, ldw,
+			gmem_y_ptr + start_m, ldy,
+			gmem_a_ptr + start_m, lda,
 			m, n
 			);
 }
