@@ -670,6 +670,26 @@ __global__ void qr256x128_kernel(
 			m, n
 			);
 }
+
+template <mtk::tsqr_tc::compute_mode::type compute_mode>
+__global__ void qr256x128_batched_kernel(
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_w_ptr, const std::size_t ldw,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_y_ptr, const std::size_t ldy,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_a_ptr, const std::size_t lda,
+		const std::size_t n,
+		const std::size_t batch_size,
+		const std::size_t* const start_m_list) {
+	const auto matrix_id = blockIdx.x;
+	const auto start_m = start_m_list[matrix_id];
+	const auto end_m = start_m_list[matrix_id + 1];
+	const auto m = end_m - start_m;
+	qr_kernel<compute_mode>(
+			gmem_w_ptr, ldw,
+			gmem_y_ptr, ldy,
+			gmem_a_ptr, lda,
+			m, n
+			);
+}
 } // noname namespace
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
@@ -699,3 +719,37 @@ template void mtk::tsqr_tc::qr256x128<compute_mode>( \
 		const std::size_t)
 
 QR256X128_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_hmma_cor);
+
+template <mtk::tsqr_tc::compute_mode::type compute_mode>
+void mtk::tsqr_tc::qr256x128_batched(
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_w_ptr, const std::size_t ldw,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_y_ptr, const std::size_t ldy,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_a_ptr, const std::size_t lda,
+		const std::size_t n,
+		const std::size_t batch_size,
+		const std::size_t* const start_m_list
+		) {
+	const unsigned block_size = 256;
+	const unsigned smem_size = 58368; //[B]
+	cudaFuncSetAttribute(qr256x128_batched_kernel<compute_mode>, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size);
+	qr256x128_batched_kernel<compute_mode><<<batch_size, block_size, smem_size>>>(
+			gmem_w_ptr, ldw,
+			gmem_y_ptr, ldy,
+			gmem_a_ptr, lda,
+			n,
+			batch_size,
+			start_m_list
+			);
+}
+
+#define QR256X128_BATCHED_INSTANCE(compute_mode) \
+template void mtk::tsqr_tc::qr256x128_batched<compute_mode>( \
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
+		const std::size_t, \
+		const std::size_t, \
+		const std::size_t* const \
+		)
+
+QR256X128_BATCHED_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_hmma_cor);
