@@ -643,6 +643,13 @@ __device__ void qr_kernel(
 		} else {
 			fill_zero<block_size, DIM_MAX_M * DIM_BLOCK_N>(smem_W_ptr);
 		}
+		compute_w<block_size, DIM_MAX_M * DIM_BLOCK_N>(
+				smem_W_ptr,
+				smem_tmp_ptr,
+				smem_Y_ptr,
+				smem_t_ptr,
+				m, real_block_n
+				);
 	}
 }
 
