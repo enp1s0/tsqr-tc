@@ -458,7 +458,7 @@ __device__ void compute_base_w_fp32_hmma_cor(
 			}
 
 			// Store
-			nvcuda::wmma::store_matrix_sync(smem_workspace_small_ptr + ((threadIdx.x & 0xffffffe0u) / 2) * smem_n * smem_n, frag_tmp, smem_n, nvcuda::wmma::mem_col_major);
+			nvcuda::wmma::store_matrix_sync(smem_workspace_small_ptr + cutf::thread::get_warp_id() * smem_n * smem_n, frag_tmp, smem_n, nvcuda::wmma::mem_col_major);
 
 			// Accumulate
 			__syncthreads();
