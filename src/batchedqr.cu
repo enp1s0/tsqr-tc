@@ -311,7 +311,7 @@ __device__ void compute_w_fp32_hmma_cor(
 					const auto col = mem_index % smem_n + (threadIdx.x & 0xffffffe0u);
 					for (unsigned k = 0; k < num_col_block; k++) {
 						const auto c = col + k * smem_n;
-						const auto v = smem_workspace_large_0_ptr[offset + c];
+						const auto v = smem_Y_ptr[offset + c];
 						const auto hv = cutf::type::cast<half>(v);
 						const auto dhv = cutf::type::cast<half>((v - cutf::type::cast<float>(hv)) * cor_scale);
 						for (unsigned i = 0; i < frag_index_count; i++) {
@@ -510,8 +510,8 @@ __device__ void compute_base_w_fp32_hmma_cor(
 		}
 	}
 	for (unsigned k = 0; k < num_col_block; k++) {
-		for (unsigned i = 0; i < frag_w.num_elements; i++) {
-			frag_w[k].x[i] += frag_d_w.x[i] / cor_scale;
+		for (unsigned i = 0; i < frag_w[0].num_elements; i++) {
+			frag_w[k].x[i] += frag_d_w[k].x[i] / cor_scale;
 		}
 	}
 
@@ -521,12 +521,12 @@ __device__ void compute_base_w_fp32_hmma_cor(
 	}
 
 	for (unsigned k = 0; k < num_col_block; k++) {
-		for (unsigned i = 0; i < frag_w.num_elements; i++) {
-			frag_w[k].x[i] += frag_d_w.x[i];
+		for (unsigned i = 0; i < frag_w[0].num_elements; i++) {
+			frag_w[k].x[i] += frag_d_w[k].x[i];
 		}
 	}
 	for (unsigned k = 0; k < num_col_block; k++) {
-		nvcuda::wmma::store_matrix_sync(smem_workspace_large_1_ptr + (threadIdx.x & 0xffffffe0u), frag_d_w[k], smem_ldm, nvcuda::wmma::mem_col_major);
+		nvcuda::wmma::store_matrix_sync(smem_workspace_large_1_ptr + (threadIdx.x & 0xffffffe0u), frag_w[k], smem_ldm, nvcuda::wmma::mem_col_major);
 	}
 }
 
@@ -643,7 +643,7 @@ __device__ void qr_kernel(
 		} else {
 			fill_zero<block_size, DIM_MAX_M * DIM_BLOCK_N>(smem_W_ptr);
 		}
-		compute_w<block_size, DIM_MAX_M * DIM_BLOCK_N>(
+		compute_w<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(
 				smem_W_ptr,
 				smem_tmp_ptr,
 				smem_Y_ptr,
