@@ -453,20 +453,6 @@ __device__ void qr_kernel(
 
 		const unsigned real_block_n = umin(DIM_BLOCK_N, n - DIM_BLOCK_N * n_block);
 		copy_matrix_g2s<block_size, DIM_BLOCK_N, DIM_MAX_M>(smem_A_ptr, gmem_a_ptr + lda * n_block * DIM_BLOCK_N, lda, m, real_block_n);
-		if (n_block > 0) {
-			// Compute R12
-			compute_r_block<compute_mode, block_size, DIM_BLOCK_N, DIM_MAX_M>(
-					gmem_a_ptr, lda,
-					smem_tmp_ptr,
-					smem_W_ptr,
-					smem_Y_ptr,
-					smem_A_ptr,
-					gmem_w_ptr, ldw,
-					gmem_y_ptr, ldy,
-					m, real_block_n
-					);
-		}
-
 
 		for (unsigned sn = 0; sn < real_block_n; sn++) {
 			MTK_DEBUG_CALL_FUNC(printf("----------\n----- small n : %u\n----------\n", sn));
