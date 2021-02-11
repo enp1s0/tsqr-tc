@@ -443,7 +443,8 @@ __device__ void qr_kernel(
 	T* const smem_W_ptr = smem_A_ptr + DIM_MAX_M * DIM_BLOCK_N;
 	T* const smem_Y_ptr = smem_W_ptr + DIM_MAX_M * DIM_BLOCK_N;
 	T* const smem_y_ptr = smem_Y_ptr + DIM_MAX_M * DIM_BLOCK_N;
-	T* const smem_tmp_ptr = smem_y_ptr + DIM_MAX_M;
+	T* const smem_t_ptr = smem_y_ptr + DIM_MAX_M;
+	T* const smem_tmp_ptr = smem_t_ptr + DIM_BLOCK_N;
 
 	const unsigned num_n_blocks = (n + DIM_BLOCK_N - 1) / DIM_BLOCK_N;
 	for (std::size_t n_block = 0; n_block < num_n_blocks; n_block++) {
@@ -504,19 +505,13 @@ __device__ void qr_kernel(
 			// Compute R
 			compute_reflection_1<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_A_ptr, smem_tmp_ptr, smem_y_ptr, t);
 
-			// Compute W
-			if (sn == 0) {
-				smem_W_ptr[threadIdx.x] = smem_y_ptr[threadIdx.x] * t;
-			} else {
-				compute_w<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_W_ptr + DIM_MAX_M * sn, smem_tmp_ptr, smem_y_ptr, smem_Y_ptr, smem_W_ptr, t);
-			}
-			MTK_DEBUG_PRINT_MATRIX(smem_W_ptr, m, sn, DIM_MAX_M, "W");
 			smem_Y_ptr[sn * DIM_MAX_M + threadIdx.x] = smem_y_ptr[threadIdx.x];
 		}
-		// Store block A, W, Y, t to global memory
+		// Store block A, Y to global memory
 		copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_a_ptr + lda * n_block * DIM_BLOCK_N, lda, smem_A_ptr, m, real_block_n);
-		copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_w_ptr + ldw * n_block * DIM_BLOCK_N, ldw, smem_W_ptr, m, real_block_n);
 		copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_y_ptr + ldy * n_block * DIM_BLOCK_N, ldy, smem_Y_ptr, m, real_block_n);
+
+		// Compute W
 	}
 }
 
@@ -564,7 +559,7 @@ void mtk::tsqr_tc::qr256x128(
 		const std::size_t m,
 		const std::size_t n) {
 	const unsigned block_size = 256;
-	const unsigned smem_size = 58368; //[B]
+	const unsigned smem_size = 58432; //[B]
 	cudaFuncSetAttribute(qr256x128_kernel<compute_mode>, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size);
 	qr256x128_kernel<compute_mode><<<1, block_size, smem_size>>>(
 			gmem_w_ptr, ldw,
@@ -594,7 +589,7 @@ void mtk::tsqr_tc::qr256x128_batched(
 		const std::size_t* const start_m_list
 		) {
 	const unsigned block_size = 256;
-	const unsigned smem_size = 58368; //[B]
+	const unsigned smem_size = 58432; //[B]
 	cudaFuncSetAttribute(qr256x128_batched_kernel<compute_mode>, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size);
 	qr256x128_batched_kernel<compute_mode><<<batch_size, block_size, smem_size>>>(
 			gmem_w_ptr, ldw,
