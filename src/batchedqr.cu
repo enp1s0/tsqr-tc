@@ -278,7 +278,7 @@ __device__ void compute_w_fp32_hmma_cor(
 		float* const smem_reduction_ptr,
 		const float* const smem_Y_ptr,
 		const float* const smem_t_ptr,
-		const std::size_t m, const std::size_t real_block_n
+		const std::size_t m, const std::size_t n, const std::size_t real_block_n
 		) {
 	constexpr unsigned num_col_block = warp_size / smem_n;
 	const float cor_scale = 1024.0f;
@@ -334,22 +334,26 @@ __device__ void compute_w_fp32_hmma_cor(
 		for (unsigned i = 0; i < frag_YtY.num_elements; i++) {
 			frag_YtY.x[i] += frag_d_YtY.x[i] / cor_scale;
 		}
-		nvcuda::wmma::store_matrix_sync(smem_reduction_ptr + ((threadIdx.x & 0xffffffe0u) / 2) * smem_n * smem_n, frag_YtY, smem_n, nvcuda::wmma::mem_col_major);
+		nvcuda::wmma::store_matrix_sync(smem_reduction_ptr + cutf::thread::get_warp_id() * smem_n * smem_n, frag_YtY, smem_n, nvcuda::wmma::mem_col_major);
 	}
 
 	// Accumulate
 	__syncthreads();
 	accumulate_vectors<smem_m>(smem_reduction_ptr, smem_n * smem_n);
+	MTK_DEBUG_PRINT_MATRIX(smem_reduction_ptr, smem_n, smem_n, smem_n, "YtY");
 
 	// Compute W
-	{
-		for (std::size_t n = 0; n < real_block_n; n++) {
-			const auto t = smem_t_ptr[n];
+	if (threadIdx.x < m) {
+		if (n == 0) {
+			smem_W_ptr[threadIdx.x] = smem_Y_ptr[threadIdx.x] * smem_t_ptr[0];
+		}
+		for (std::size_t tn = 1; tn < real_block_n; tn++) {
+			const auto t = smem_t_ptr[tn];
 			float v = 0;
-			for (std::size_t sn = 0; sn < n; sn++) {
-				v += smem_W_ptr[sn * smem_ldm + threadIdx.x] * t * smem_reduction_ptr[sn * smem_n + n];
+			for (std::size_t sn = 0; sn < tn; sn++) {
+				v += smem_W_ptr[sn * smem_ldm + threadIdx.x] * t * smem_reduction_ptr[sn * smem_n + tn];
 			}
-			smem_W_ptr[n * smem_ldm + threadIdx.x] += v;
+			smem_W_ptr[tn * smem_ldm + threadIdx.x] += -v;
 		}
 	}
 }
@@ -360,7 +364,7 @@ __device__ void compute_w(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_reduction_ptr,
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_Y_ptr,
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_t_ptr,
-		const std::size_t m, const std::size_t real_block_n
+		const std::size_t m, const std::size_t n, const std::size_t real_block_n
 		) {
 	MTK_DEBUG_CALL_FUNC(printf("# --> %s\n", __func__));
 	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_hmma_cor) {
@@ -369,7 +373,7 @@ __device__ void compute_w(
 				smem_reduction_ptr,
 				smem_Y_ptr,
 				smem_t_ptr,
-				m, real_block_n
+				m, n, real_block_n
 				);
 	}
 	MTK_DEBUG_CALL_FUNC(printf("# <-- %s\n", __func__));
@@ -623,13 +627,19 @@ __device__ void qr_kernel(
 			compute_reflection_1<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_A_ptr, smem_tmp_ptr, smem_y_ptr, t);
 
 			smem_Y_ptr[sn * DIM_MAX_M + threadIdx.x] = smem_y_ptr[threadIdx.x];
+			if (threadIdx.x == sn) {
+				smem_t_ptr[sn] = t;
+			}
 		}
+		MTK_DEBUG_PRINT_MATRIX(smem_Y_ptr, m, real_block_n, DIM_MAX_M, "Y (Block Result)");
+		MTK_DEBUG_PRINT_MATRIX(smem_t_ptr, 1, real_block_n, 1, "t (Block Result)");
 		// Store block A, Y to global memory
 		copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_a_ptr + lda * n_block * DIM_BLOCK_N, lda, smem_A_ptr, m, real_block_n);
 		copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_y_ptr + ldy * n_block * DIM_BLOCK_N, ldy, smem_Y_ptr, m, real_block_n);
 
 		// Compute W
 		if (n_block != 0) {
+			__syncthreads();
 			compute_base_w<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(
 					smem_Y_ptr,
 					smem_W_ptr,
@@ -648,8 +658,10 @@ __device__ void qr_kernel(
 				smem_tmp_ptr,
 				smem_Y_ptr,
 				smem_t_ptr,
-				m, real_block_n
+				m, n_block, real_block_n
 				);
+		copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_w_ptr + ldw * n_block * DIM_BLOCK_N, ldw, smem_W_ptr, m, real_block_n);
+		MTK_DEBUG_PRINT_MATRIX(smem_W_ptr, m, real_block_n, DIM_MAX_M, "W (Block Result)");
 	}
 }
 
