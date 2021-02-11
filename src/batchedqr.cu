@@ -344,9 +344,6 @@ __device__ void compute_w_fp32_hmma_cor(
 
 	// Compute W
 	if (threadIdx.x < m) {
-		if (n == 0) {
-			smem_W_ptr[threadIdx.x] = smem_Y_ptr[threadIdx.x] * smem_t_ptr[0];
-		}
 		for (std::size_t tn = 1; tn < real_block_n; tn++) {
 			const auto t = smem_t_ptr[tn];
 			float v = 0;
@@ -397,6 +394,13 @@ __device__ void compute_base_w_fp32_hmma_cor(
 		) {
 	constexpr unsigned num_col_block = warp_size / smem_n;
 	const float cor_scale = 1024.0f;
+
+	if (n == 0) {
+		for (std::size_t i = 0; i < real_block_n; i++) {
+			smem_workspace_large_1_ptr[threadIdx.x + i * smem_ldm] = smem_t_ptr[i] * smem_workspace_large_0_ptr[threadIdx.x + i * smem_ldm];
+		}
+		return;
+	}
 
 	{
 		nvcuda::wmma::fragment<nvcuda::wmma::matrix_b, smem_n, smem_n, smem_n, half, nvcuda::wmma::col_major> frag_Yb[num_col_block], frag_d_Yb[num_col_block];
@@ -638,21 +642,17 @@ __device__ void qr_kernel(
 		copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_y_ptr + ldy * n_block * DIM_BLOCK_N, ldy, smem_Y_ptr, m, real_block_n);
 
 		// Compute W
-		if (n_block != 0) {
-			__syncthreads();
-			compute_base_w<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(
-					smem_Y_ptr,
-					smem_W_ptr,
-					smem_tmp_ptr,
-					smem_t_ptr,
-					gmem_w_ptr, ldw,
-					gmem_y_ptr, ldy,
-					m, n_block * DIM_BLOCK_N,
-					real_block_n
-					);
-		} else {
-			fill_zero<block_size, DIM_MAX_M * DIM_BLOCK_N>(smem_W_ptr);
-		}
+		__syncthreads();
+		compute_base_w<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(
+				smem_Y_ptr,
+				smem_W_ptr,
+				smem_tmp_ptr,
+				smem_t_ptr,
+				gmem_w_ptr, ldw,
+				gmem_y_ptr, ldy,
+				m, n_block * DIM_BLOCK_N,
+				real_block_n
+				);
 		compute_w<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(
 				smem_W_ptr,
 				smem_tmp_ptr,
