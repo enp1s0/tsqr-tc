@@ -344,11 +344,12 @@ __device__ void compute_w_fp32_hmma_cor(
 	// Compute W
 	{
 		for (std::size_t n = 0; n < real_block_n; n++) {
+			const auto t = smem_t_ptr[n];
 			float v = 0;
 			for (std::size_t sn = 0; sn < n; sn++) {
-				v += smem_W_ptr[sn * smem_ldm + threadIdx.x] * smem_t_ptr[n] * smem_reduction_ptr[sn * smem_n + n];
+				v += smem_W_ptr[sn * smem_ldm + threadIdx.x] * t * smem_reduction_ptr[sn * smem_n + n];
 			}
-			smem_W_ptr[n * smem_ldm + threadIdx.x] = v;
+			smem_W_ptr[n * smem_ldm + threadIdx.x] += v;
 		}
 	}
 }
