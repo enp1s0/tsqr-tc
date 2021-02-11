@@ -579,7 +579,6 @@ __device__ void qr_kernel(
 
 	const unsigned num_n_blocks = (n + DIM_BLOCK_N - 1) / DIM_BLOCK_N;
 	for (std::size_t n_block = 0; n_block < num_n_blocks; n_block++) {
-		fill_zero<block_size, DIM_MAX_M * DIM_BLOCK_N>(smem_W_ptr);
 		fill_zero<block_size, DIM_MAX_M * DIM_BLOCK_N>(smem_Y_ptr);
 
 		const unsigned real_block_n = umin(DIM_BLOCK_N, n - DIM_BLOCK_N * n_block);
@@ -629,6 +628,20 @@ __device__ void qr_kernel(
 		copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_y_ptr + ldy * n_block * DIM_BLOCK_N, ldy, smem_Y_ptr, m, real_block_n);
 
 		// Compute W
+		if (n_block != 0) {
+			compute_base_w<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(
+					smem_Y_ptr,
+					smem_W_ptr,
+					smem_tmp_ptr,
+					smem_t_ptr,
+					gmem_w_ptr, ldw,
+					gmem_y_ptr, ldy,
+					m, n_block * DIM_BLOCK_N,
+					real_block_n
+					);
+		} else {
+			fill_zero<block_size, DIM_MAX_M * DIM_BLOCK_N>(smem_W_ptr);
+		}
 	}
 }
 
