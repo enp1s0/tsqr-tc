@@ -643,7 +643,7 @@ __device__ void update_a_fp32_hmma_cor(
 		nvcuda::wmma::fragment<nvcuda::wmma::matrix_a, smem_n, smem_n, smem_n, half, nvcuda::wmma::col_major> frag_Y[num_col_block], frag_d_Y[num_col_block];
 		nvcuda::wmma::fragment<nvcuda::wmma::matrix_b, smem_n, smem_n, smem_n, half, nvcuda::wmma::col_major> frag_WtA, frag_d_WtA;
 
-		// Load Wt
+		// Load Y
 		mtk::wmma::foreach<decltype(frag_Y[0])>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
 					const auto offset = (mem_index / smem_n) * smem_ldm;
 					const auto row = mem_index % smem_n + (threadIdx.x & 0xffffffe0u);
@@ -659,7 +659,7 @@ __device__ void update_a_fp32_hmma_cor(
 						}
 					}
 				});
-		// Load A
+		// Load WtA
 		mtk::wmma::foreach<decltype(frag_WtA)>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
 					const auto v = smem_WtA_ptr[mem_index];
 					const auto hv = cutf::type::cast<half>(v);
@@ -673,9 +673,9 @@ __device__ void update_a_fp32_hmma_cor(
 
 		for (unsigned k = 0; k < num_col_block; k++) {
 			nvcuda::wmma::fragment<nvcuda::wmma::accumulator, smem_n, smem_n, smem_n, float> frag_A, frag_d_A;
-			nvcuda::wmma::load_matrix_sync(frag_A, smem_A_ptr + (threadIdx.x & 0xffffffe0u), smem_ldm, nvcuda::wmma::mem_col_major);
+			nvcuda::wmma::load_matrix_sync(frag_A, smem_A_ptr + (threadIdx.x & 0xffffffe0u) + k * smem_n, smem_ldm, nvcuda::wmma::mem_col_major);
 			mtk::wmma::fill_zero(frag_d_A);
-			// Compute (Wt * A)
+			// Compute (Y * WtA)
 			nvcuda::wmma::mma_sync(frag_A  , frag_Y[k]  , frag_WtA  , frag_A  );
 			nvcuda::wmma::mma_sync(frag_d_A, frag_d_Y[k], frag_WtA  , frag_d_A);
 			nvcuda::wmma::mma_sync(frag_d_A, frag_Y[k]  , frag_d_WtA, frag_d_A);
@@ -777,6 +777,7 @@ __device__ void qr_kernel(
 		MTK_DEBUG_PRINT_MATRIX(smem_Y_ptr, m, real_block_n, DIM_MAX_M, "Y (Block Result)");
 		MTK_DEBUG_PRINT_MATRIX(smem_t_ptr, 1, real_block_n, 1, "t (Block Result)");
 		// Store block Y
+		copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_a_ptr + lda * n_block * DIM_BLOCK_N, lda, smem_A_ptr, m, real_block_n);
 		copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_y_ptr + ldy * n_block * DIM_BLOCK_N, ldy, smem_Y_ptr, m, real_block_n);
 
 		// Compute W
@@ -805,12 +806,11 @@ __device__ void qr_kernel(
 		for (std::size_t sub_n_block = n_block + 1; sub_n_block < num_n_blocks; sub_n_block++) {
 			const unsigned real_block_n = umin(DIM_BLOCK_N, n - DIM_BLOCK_N * sub_n_block);
 			copy_matrix_g2s<block_size, DIM_BLOCK_N, DIM_MAX_M>(smem_A_ptr, gmem_a_ptr + lda * sub_n_block * DIM_BLOCK_N, lda, m, real_block_n);
+			MTK_DEBUG_PRINT_MATRIX(smem_A_ptr, m, real_block_n, DIM_MAX_M, "A (before updating)");
 			update_a<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_A_ptr, smem_tmp_ptr, smem_W_ptr, smem_Y_ptr);
 			MTK_DEBUG_PRINT_MATRIX(smem_A_ptr, m, real_block_n, DIM_MAX_M, "A (updated)");
 			copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_a_ptr + lda * sub_n_block * DIM_BLOCK_N, lda, smem_A_ptr, m, real_block_n);
 		}
-		copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_a_ptr + lda * n_block * DIM_BLOCK_N, lda, smem_A_ptr, m, real_block_n);
-
 	}
 }
 
