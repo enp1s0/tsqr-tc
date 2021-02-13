@@ -244,13 +244,15 @@ __device__ void compute_reflection_1_fp32_hmma_cor(
 	__syncthreads();
 	mtk::wmma::make_direct_product_fragment(frag_tmp, smem_reduction_ptr);
 
+	auto y_ptr = smem_y_ptr + (threadIdx.x & 0xffffffe0u);
+	auto A_ptr = smem_A_ptr + (threadIdx.x & 0xffffffe0u);
 	for (unsigned i = 0; i < num_col_block; i++) {
-		mtk::wmma::make_direct_product_fragment(frag_y, smem_y_ptr + i * smem_n + (threadIdx.x & 0xffffffe0u));
-		nvcuda::wmma::load_matrix_sync(frag_A, smem_A_ptr + i * smem_n + (threadIdx.x & 0xffffffe0u), smem_ldm, nvcuda::wmma::mem_col_major);
+		mtk::wmma::make_direct_product_fragment(frag_y, y_ptr + i * smem_n);
+		nvcuda::wmma::load_matrix_sync(frag_A, A_ptr + i * smem_n, smem_ldm, nvcuda::wmma::mem_col_major);
 
 		nvcuda::wmma::mma_sync(frag_A, frag_y, frag_tmp, frag_A);
 
-		nvcuda::wmma::store_matrix_sync(smem_A_ptr + i * smem_n + (threadIdx.x & 0xffffffe0u), frag_A, smem_ldm, nvcuda::wmma::mem_col_major);
+		nvcuda::wmma::store_matrix_sync(A_ptr + i * smem_n, frag_A, smem_ldm, nvcuda::wmma::mem_col_major);
 	}
 }
 
