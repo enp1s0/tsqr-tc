@@ -13,6 +13,7 @@ class tsqr_buffer {
 	buffer_type* w_buffer_ptr;
 	buffer_type* y_buffer_ptr;
 	std::size_t* index_buffer_ptr;
+	std::size_t* index_buffer_host_ptr;
 public:
 	tsqr_buffer(const std::size_t m, const std::size_t n) : m(m), n(n) {}
 	~tsqr_buffer();
@@ -24,6 +25,7 @@ public:
 	buffer_type* get_w_buffer_ptr() const {return w_buffer_ptr;}
 	buffer_type* get_y_buffer_ptr() const {return y_buffer_ptr;}
 	std::size_t* get_index_buffer_ptr() const {return index_buffer_ptr;}
+	std::size_t* get_index_buffer_host_ptr() const {return index_buffer_host_ptr;}
 
 	std::size_t get_r_buffer_count() const;
 	std::size_t get_y_buffer_count() const;

@@ -44,6 +44,7 @@ void mtk::tsqr_tc::tsqr_buffer<compute_mode>::allocate() {
 	CUTF_CHECK_ERROR(cudaMalloc(&w_buffer_ptr, sizeof(typename mtk::tsqr_tc::tsqr_buffer<compute_mode>::buffer_type) * get_w_buffer_count()));
 	CUTF_CHECK_ERROR(cudaMalloc(&y_buffer_ptr, sizeof(typename mtk::tsqr_tc::tsqr_buffer<compute_mode>::buffer_type) * get_y_buffer_count()));
 	CUTF_CHECK_ERROR(cudaMalloc(&index_buffer_ptr, sizeof(std::size_t) * get_index_buffer_count()));
+	CUTF_CHECK_ERROR(cudaMallocHost(&index_buffer_host_ptr, sizeof(std::size_t) * get_index_buffer_count()));
 }
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
@@ -54,10 +55,17 @@ void mtk::tsqr_tc::tsqr_buffer<compute_mode>::free() {
 			ptr = nullptr;
 		}
 	};
+	auto free_host_func = [](auto* ptr) {
+		if (ptr != nullptr) {
+			CUTF_CHECK_ERROR(cudaFreeHost(ptr));
+			ptr = nullptr;
+		}
+	};
 	free_func(r_buffer_ptr);
 	free_func(w_buffer_ptr);
 	free_func(y_buffer_ptr);
 	free_func(index_buffer_ptr);
+	free_host_func(index_buffer_host_ptr);
 }
 
 template class mtk::tsqr_tc::tsqr_buffer<mtk::tsqr_tc::compute_mode::fp32_hmma_cor>;
