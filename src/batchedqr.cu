@@ -573,105 +573,111 @@ __device__ void compute_base_w(
 	MTK_DEBUG_CALL_FUNC(printf("# <-- %s\n", __func__));
 }
 
-// This function computes `A <- (I - W * Y^T)A`.
+// This function computes `w = (I - W * Y^t)y`.
 // Restrictions:
+// - At first, smem_workspace_large_0_ptr must contain A block
+// - At first, smem_workspace_large_1_ptr must contain last W block
 // - smem_m == block_size
 // - smem_n == DIM_BLOCK_N
 template <unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
 __device__ void update_a_fp32_hmma_cor(
-		float* const smem_A_ptr,
-		float* const smem_WtA_ptr,
-		const float* const smem_W_ptr,
-		const float* const smem_Y_ptr
+		float* const smem_workspace_large_0_ptr,
+		float* const smem_workspace_large_1_ptr,
+		float* const smem_workspace_large_2_ptr,
+		float* const smem_workspace_small_ptr,
+		const float* const gmem_W_ptr, const std::size_t ldW,
+		const float* const gmem_Y_ptr, const std::size_t ldY,
+		const std::size_t m, const std::size_t n,
+		const std::size_t real_block_n
 		) {
 	constexpr unsigned num_col_block = warp_size / smem_n;
 	const float cor_scale = 1024.0f;
 
+	if (n == 0) {
+		return;
+	}
 	{
-		nvcuda::wmma::fragment<nvcuda::wmma::matrix_a, smem_n, smem_n, smem_n, half, nvcuda::wmma::row_major> frag_Wt[num_col_block], frag_d_Wt[num_col_block];
 		nvcuda::wmma::fragment<nvcuda::wmma::matrix_b, smem_n, smem_n, smem_n, half, nvcuda::wmma::col_major> frag_A[num_col_block], frag_d_A[num_col_block];
-		// Load Wt
-		mtk::wmma::foreach<decltype(frag_Wt[0])>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
-					const auto offset = (mem_index / smem_n) * smem_ldm;
-					const auto row = mem_index % smem_n + (threadIdx.x & 0xffffffe0u);
-					for (unsigned k = 0; k < num_col_block; k++) {
-						const auto r = row + k * smem_n;
-						const auto v = smem_W_ptr[offset + r];
-						const auto hv = cutf::type::cast<half>(v);
-						const auto dhv = cutf::type::cast<half>((v - cutf::type::cast<float>(hv)) * cor_scale);
-						for (unsigned i = 0; i < frag_index_count; i++) {
-						const unsigned frag_index = frag_index_list[i];
-							frag_Wt[k].x[frag_index] = hv;
-							frag_d_Wt[k].x[frag_index] = dhv;
-						}
-					}
-				});
-		// Load A
 		mtk::wmma::foreach<decltype(frag_A[0])>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
 					const auto offset = (mem_index / smem_n) * smem_ldm;
-					const auto row = mem_index % smem_n + (threadIdx.x & 0xffffffe0u);
+					const auto col = mem_index % smem_n + (threadIdx.x & 0xffffffe0u);
 					for (unsigned k = 0; k < num_col_block; k++) {
-						const auto r = row + k * smem_n;
-						const auto v = smem_A_ptr[offset + r];
+						const auto c = col + k * smem_n;
+						const auto v = smem_workspace_large_0_ptr[offset + c];
 						const auto hv = cutf::type::cast<half>(v);
 						const auto dhv = cutf::type::cast<half>((v - cutf::type::cast<float>(hv)) * cor_scale);
 						for (unsigned i = 0; i < frag_index_count; i++) {
-						const unsigned frag_index = frag_index_list[i];
+							const unsigned frag_index = frag_index_list[i];
 							frag_A[k].x[frag_index] = hv;
 							frag_d_A[k].x[frag_index] = dhv;
 						}
 					}
 				});
 
-		nvcuda::wmma::fragment<nvcuda::wmma::accumulator, smem_n, smem_n, smem_n, float> frag_tmp, frag_d_tmp;
-		mtk::wmma::fill_zero(frag_tmp);
-		mtk::wmma::fill_zero(frag_d_tmp);
-		for (unsigned k = 0; k < num_col_block; k++) {
-			// Compute (Wt * A)
-			nvcuda::wmma::mma_sync(frag_tmp  , frag_Wt[k]  , frag_A[k]  , frag_tmp  );
-			nvcuda::wmma::mma_sync(frag_d_tmp, frag_d_Wt[k], frag_A[k]  , frag_d_tmp);
-			nvcuda::wmma::mma_sync(frag_d_tmp, frag_Wt[k]  , frag_d_A[k], frag_d_tmp);
-		}
+		// Compute WtA
+		for (std::size_t bn = 0; bn < n; bn += smem_n) {
+			nvcuda::wmma::fragment<nvcuda::wmma::matrix_a, smem_n, smem_n, smem_n, half, nvcuda::wmma::row_major> frag_Wt[num_col_block], frag_d_Wt[num_col_block];
+			nvcuda::wmma::fragment<nvcuda::wmma::accumulator, smem_n, smem_n, smem_n, float> frag_tmp, frag_d_tmp;
 
-		for (unsigned i = 0; i < frag_tmp.num_elements; i++) {
-			frag_tmp.x[i] += frag_d_tmp.x[i] / cor_scale;
-		}
+			copy_matrix_g2s<smem_m, smem_n, smem_ldm>(smem_workspace_large_1_ptr, gmem_W_ptr + bn * ldW, ldW, m, smem_n);
 
-		nvcuda::wmma::store_matrix_sync(smem_WtA_ptr + smem_n * smem_n * (threadIdx.x >> 5), frag_tmp, smem_n, nvcuda::wmma::mem_col_major);
-	}
-
-	__syncthreads();
-	accumulate_vectors<smem_m>(smem_WtA_ptr, smem_n * smem_n);
-	if (threadIdx.x < smem_n * smem_n) {
-		smem_WtA_ptr[threadIdx.x] *= -1.0f;
-	}
-	__syncthreads();
-	MTK_DEBUG_PRINT_MATRIX(smem_WtA_ptr, smem_n, smem_n, smem_n, "WtA (accumulated)");
-
-	// Compute (A = A - Y * WtA)
-	{
-		nvcuda::wmma::fragment<nvcuda::wmma::matrix_a, smem_n, smem_n, smem_n, half, nvcuda::wmma::col_major> frag_Y[num_col_block], frag_d_Y[num_col_block];
-		nvcuda::wmma::fragment<nvcuda::wmma::matrix_b, smem_n, smem_n, smem_n, half, nvcuda::wmma::col_major> frag_WtA, frag_d_WtA;
-
-		// Load Y
-		mtk::wmma::foreach<decltype(frag_Y[0])>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
-					const auto offset = (mem_index / smem_n) * smem_ldm;
-					const auto row = mem_index % smem_n + (threadIdx.x & 0xffffffe0u);
-					for (unsigned k = 0; k < num_col_block; k++) {
-						const auto r = row + k * smem_n;
-						const auto v = smem_Y_ptr[offset + r];
-						const auto hv = cutf::type::cast<half>(v);
-						const auto dhv = cutf::type::cast<half>((v - cutf::type::cast<float>(hv)) * cor_scale);
-						for (unsigned i = 0; i < frag_index_count; i++) {
-						const unsigned frag_index = frag_index_list[i];
-							frag_Y[k].x[frag_index] = hv;
-							frag_d_Y[k].x[frag_index] = dhv;
+			// Load Wt
+			mtk::wmma::foreach<decltype(frag_Wt[0])>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
+						const auto offset = (mem_index / smem_n) * smem_ldm;
+						const auto col = mem_index % smem_n + (threadIdx.x & 0xffffffe0u);
+						for (unsigned k = 0; k < num_col_block; k++) {
+							const auto c = col + k * smem_n;
+							const auto v = smem_workspace_large_1_ptr[offset + c];
+							const auto hv = cutf::type::cast<half>(v);
+							const auto dhv = cutf::type::cast<half>((v - cutf::type::cast<float>(hv)) * cor_scale);
+							for (unsigned i = 0; i < frag_index_count; i++) {
+								const unsigned frag_index = frag_index_list[i];
+								frag_Wt[k].x[frag_index] = hv;
+								frag_d_Wt[k].x[frag_index] = dhv;
+							}
 						}
-					}
-				});
+					});
+
+			mtk::wmma::fill_zero(frag_tmp);
+			mtk::wmma::fill_zero(frag_d_tmp);
+			for (unsigned k = 0; k < num_col_block; k++) {
+				// Compute (Wt * y)
+				nvcuda::wmma::mma_sync(frag_tmp  , frag_Wt[k]  , frag_A[k], frag_tmp  );
+				nvcuda::wmma::mma_sync(frag_d_tmp, frag_d_Wt[k], frag_A[k], frag_d_tmp);
+				nvcuda::wmma::mma_sync(frag_d_tmp, frag_Wt[k], frag_d_A[k], frag_d_tmp);
+			}
+
+			for (unsigned i = 0; i < frag_tmp.num_elements; i++) {
+				frag_tmp.x[i] += frag_d_tmp.x[i] / cor_scale;
+			}
+
+			// Store
+			nvcuda::wmma::store_matrix_sync(smem_workspace_small_ptr + cutf::thread::get_warp_id() * smem_n * smem_n, frag_tmp, smem_n, nvcuda::wmma::mem_col_major);
+
+			// Accumulate
+			__syncthreads();
+			accumulate_vectors<smem_m>(smem_workspace_small_ptr, smem_n * smem_n);
+			MTK_DEBUG_CALL_FUNC(printf("WtA (%lu/%lu)\n", bn + 1, n));
+			MTK_DEBUG_PRINT_MATRIX(smem_workspace_small_ptr, smem_n, smem_n, smem_n, "");
+
+			// Save
+			//if (threadIdx.x < smem_n * smem_n) {
+			smem_workspace_large_2_ptr[bn * smem_n * smem_n + threadIdx.x] = -smem_workspace_small_ptr[threadIdx.x];
+			//}
+		}
+	}
+
+	// Compute As <- As - Yg * WtA
+	nvcuda::wmma::fragment<nvcuda::wmma::accumulator, smem_n, smem_n, smem_n, float> frag_A[num_col_block], frag_d_A[num_col_block];
+	for (unsigned k = 0; k < num_col_block; k++) {
+		nvcuda::wmma::load_matrix_sync(frag_A[k], smem_workspace_large_0_ptr + (threadIdx.x & 0xffffffe0u) + k * smem_n, smem_ldm, nvcuda::wmma::mem_col_major);
+		mtk::wmma::fill_zero(frag_d_A[k]);
+	}
+	for (std::size_t bn = 0; bn < n; bn += smem_n) {
+		nvcuda::wmma::fragment<nvcuda::wmma::matrix_b, smem_n, smem_n, smem_n, half, nvcuda::wmma::col_major> frag_WtA, frag_d_WtA;
 		// Load WtA
 		mtk::wmma::foreach<decltype(frag_WtA)>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
-					const auto v = smem_WtA_ptr[mem_index];
+					const auto v = smem_workspace_large_2_ptr[mem_index];
 					const auto hv = cutf::type::cast<half>(v);
 					const auto dhv = cutf::type::cast<half>((v - cutf::type::cast<float>(hv)) * cor_scale);
 					for (unsigned i = 0; i < frag_index_count; i++) {
@@ -681,34 +687,63 @@ __device__ void update_a_fp32_hmma_cor(
 					}
 				});
 
+		copy_matrix_g2s<smem_m, smem_n, smem_ldm>(smem_workspace_large_1_ptr, gmem_Y_ptr + bn * ldY, ldY, m, smem_n);
+		nvcuda::wmma::fragment<nvcuda::wmma::matrix_a, smem_n, smem_n, smem_n, half, nvcuda::wmma::col_major> frag_Y[num_col_block], frag_d_Y[num_col_block];
+		// Load W
+		mtk::wmma::foreach<decltype(frag_Y[0])>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
+					const auto offset = (mem_index / smem_n) * smem_ldm;
+					const auto row = mem_index % smem_n + (threadIdx.x & 0xffffffe0u);
+					for (unsigned k = 0; k < num_col_block; k++) {
+						const auto r = row + k * smem_n;
+						const auto v = smem_workspace_large_1_ptr[offset + r];
+						const auto hv = cutf::type::cast<half>(v);
+						const auto dhv = cutf::type::cast<half>((v - cutf::type::cast<float>(hv)) * cor_scale);
+						for (unsigned i = 0; i < frag_index_count; i++) {
+						const unsigned frag_index = frag_index_list[i];
+							frag_Y[k].x[frag_index] = hv;
+							frag_d_Y[k].x[frag_index] = dhv;
+						}
+					}
+				});
+
 		for (unsigned k = 0; k < num_col_block; k++) {
-			nvcuda::wmma::fragment<nvcuda::wmma::accumulator, smem_n, smem_n, smem_n, float> frag_A, frag_d_A;
-			nvcuda::wmma::load_matrix_sync(frag_A, smem_A_ptr + (threadIdx.x & 0xffffffe0u) + k * smem_n, smem_ldm, nvcuda::wmma::mem_col_major);
-			mtk::wmma::fill_zero(frag_d_A);
 			// Compute (Y * WtA)
-			nvcuda::wmma::mma_sync(frag_A  , frag_Y[k]  , frag_WtA  , frag_A  );
-			nvcuda::wmma::mma_sync(frag_d_A, frag_d_Y[k], frag_WtA  , frag_d_A);
-			nvcuda::wmma::mma_sync(frag_d_A, frag_Y[k]  , frag_d_WtA, frag_d_A);
-
-			for (unsigned i = 0; i < frag_A.num_elements; i++) {
-				frag_A.x[i] += frag_d_A.x[i] / cor_scale;
-			}
-
-			nvcuda::wmma::store_matrix_sync(smem_A_ptr + (threadIdx.x & 0xffffffe0u) + k * smem_n, frag_A, smem_ldm, nvcuda::wmma::mem_col_major);
+			nvcuda::wmma::mma_sync(frag_A[k]  , frag_Y[k]  , frag_WtA  , frag_A[k]  );
+			nvcuda::wmma::mma_sync(frag_d_A[k], frag_d_Y[k], frag_WtA  , frag_d_A[k]);
+			nvcuda::wmma::mma_sync(frag_d_A[k], frag_Y[k]  , frag_d_WtA, frag_d_A[k]);
 		}
 	}
+	for (unsigned k = 0; k < num_col_block; k++) {
+		for (unsigned i = 0; i < frag_A[0].num_elements; i++) {
+			frag_A[k].x[i] += frag_d_A[k].x[i] / cor_scale;
+		}
+		nvcuda::wmma::store_matrix_sync(smem_workspace_large_0_ptr + (threadIdx.x & 0xffffffe0u) + k * smem_n, frag_A[k], smem_ldm, nvcuda::wmma::mem_col_major);
+	}
+	__syncthreads();
 }
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode, unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
 __device__ void update_a(
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_A_ptr,
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_WtA_ptr,
-		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_W_ptr,
-		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_Y_ptr
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_workspace_large_0_ptr,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_workspace_large_1_ptr,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_workspace_large_2_ptr,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_workspace_small_ptr,
+		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_W_ptr, const std::size_t ldW,
+		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_Y_ptr, const std::size_t ldY,
+		const std::size_t m, const std::size_t n,
+		const std::size_t real_block_n
 		) {
 	MTK_DEBUG_CALL_FUNC(printf("# --> %s\n", __func__));
 	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_hmma_cor) {
-		update_a_fp32_hmma_cor<smem_m, smem_n, smem_ldm>(smem_A_ptr, smem_WtA_ptr, smem_W_ptr, smem_Y_ptr);
+		update_a_fp32_hmma_cor<smem_m, smem_n, smem_ldm>(
+				smem_workspace_large_0_ptr,
+				smem_workspace_large_1_ptr,
+				smem_workspace_large_2_ptr,
+				smem_workspace_small_ptr,
+				gmem_W_ptr, ldW,
+				gmem_Y_ptr, ldY,
+				m, n, real_block_n
+				);
 	}
 	MTK_DEBUG_CALL_FUNC(printf("# <-- %s\n", __func__));
 }
@@ -741,6 +776,16 @@ __device__ void qr_kernel(
 
 		const unsigned real_block_n = umin(DIM_BLOCK_N, n - DIM_BLOCK_N * n_block);
 		copy_matrix_g2s<block_size, DIM_BLOCK_N, DIM_MAX_M>(smem_A_ptr, gmem_a_ptr + lda * n_block * DIM_BLOCK_N, lda, m, real_block_n);
+		update_a<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(
+				smem_A_ptr,
+				smem_W_ptr,
+				smem_Y_ptr,
+				smem_tmp_ptr,
+				gmem_w_ptr, ldw,
+				gmem_y_ptr, ldy,
+				m, n_block * DIM_BLOCK_N,
+				real_block_n
+				);
 
 		for (unsigned sn = 0; sn < real_block_n; sn++) {
 			MTK_DEBUG_CALL_FUNC(printf("----------\n----- small n : %u\n----------\n", sn));
@@ -813,16 +858,6 @@ __device__ void qr_kernel(
 				);
 		copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_w_ptr + ldw * n_block * DIM_BLOCK_N, ldw, smem_W_ptr, m, real_block_n);
 		MTK_DEBUG_PRINT_MATRIX(smem_W_ptr, m, real_block_n, DIM_MAX_M, "W (Block Result)");
-
-		// Update A
-		for (std::size_t sub_n_block = n_block + 1; sub_n_block < num_n_blocks; sub_n_block++) {
-			const unsigned real_block_n = umin(DIM_BLOCK_N, n - DIM_BLOCK_N * sub_n_block);
-			copy_matrix_g2s<block_size, DIM_BLOCK_N, DIM_MAX_M>(smem_A_ptr, gmem_a_ptr + lda * sub_n_block * DIM_BLOCK_N, lda, m, real_block_n);
-			MTK_DEBUG_PRINT_MATRIX(smem_A_ptr, m, real_block_n, DIM_MAX_M, "A (before updating)");
-			update_a<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_A_ptr, smem_tmp_ptr, smem_W_ptr, smem_Y_ptr);
-			MTK_DEBUG_PRINT_MATRIX(smem_A_ptr, m, real_block_n, DIM_MAX_M, "A (updated)");
-			copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_a_ptr + lda * sub_n_block * DIM_BLOCK_N, lda, smem_A_ptr, m, real_block_n);
-		}
 	}
 }
 
