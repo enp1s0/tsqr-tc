@@ -14,7 +14,7 @@ NVCCFLAGS+=-gencode arch=compute_86,code=sm_86
 NVCCFLAGS+=-I./$(INCLUDEDIR)
 
 TARGET=libtsqr-tc.a
-SRCS=batchedqr.cu
+SRCS=batchedqr.cu tsqr_buffer.cu tsqr.cu
 OBJS=$(SRCS:%.cu=$(OBJDIR)/%.o)
 DLINKOBJS=$(SRCS:%.cu=$(OBJDIR)/%.dlink.oo)
 HEADERS=$(shell find $(INCLUDEDIR) -name '*.cuh' -o -name '*.hpp' -o -name '*.h')
