@@ -677,7 +677,7 @@ __device__ void update_a_fp32_hmma_cor(
 		nvcuda::wmma::fragment<nvcuda::wmma::matrix_b, smem_n, smem_n, smem_n, half, nvcuda::wmma::col_major> frag_WtA, frag_d_WtA;
 		// Load WtA
 		mtk::wmma::foreach<decltype(frag_WtA)>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
-					const auto v = smem_workspace_large_2_ptr[mem_index];
+					const auto v = smem_workspace_large_2_ptr[mem_index + bn * smem_n * smem_n];
 					const auto hv = cutf::type::cast<half>(v);
 					const auto dhv = cutf::type::cast<half>((v - cutf::type::cast<float>(hv)) * cor_scale);
 					for (unsigned i = 0; i < frag_index_count; i++) {
@@ -776,6 +776,7 @@ __device__ void qr_kernel(
 
 		const unsigned real_block_n = umin(DIM_BLOCK_N, n - DIM_BLOCK_N * n_block);
 		copy_matrix_g2s<block_size, DIM_BLOCK_N, DIM_MAX_M>(smem_A_ptr, gmem_a_ptr + lda * n_block * DIM_BLOCK_N, lda, m, real_block_n);
+		MTK_DEBUG_PRINT_MATRIX(smem_A_ptr, m, real_block_n, DIM_MAX_M, "A (Before updating)");
 		update_a<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(
 				smem_A_ptr,
 				smem_W_ptr,
