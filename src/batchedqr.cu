@@ -468,7 +468,7 @@ __device__ void compute_base_w_fp32_hmma_cor(
 
 			// Save
 			//if (threadIdx.x < smem_n * smem_n) {
-			smem_workspace_large_2_ptr[bn * smem_n * smem_n + threadIdx.x] = -smem_workspace_small_ptr[threadIdx.x];
+			smem_workspace_large_2_ptr[bn * smem_n + threadIdx.x] = -smem_workspace_small_ptr[threadIdx.x];
 			//}
 		}
 	}
@@ -479,11 +479,12 @@ __device__ void compute_base_w_fp32_hmma_cor(
 		mtk::wmma::fill_zero(frag_w[k]);
 		mtk::wmma::fill_zero(frag_d_w[k]);
 	}
+	__syncthreads();
 	for (std::size_t bn = 0; bn < n; bn += smem_n) {
 		nvcuda::wmma::fragment<nvcuda::wmma::matrix_b, smem_n, smem_n, smem_n, half, nvcuda::wmma::col_major> frag_YY, frag_d_YY;
 		// Load YY
 		mtk::wmma::foreach<decltype(frag_YY)>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
-					const auto v = smem_workspace_large_2_ptr[mem_index];
+					const auto v = smem_workspace_large_2_ptr[mem_index + bn * smem_n];
 					const auto hv = cutf::type::cast<half>(v);
 					const auto dhv = cutf::type::cast<half>((v - cutf::type::cast<float>(hv)) * cor_scale);
 					for (unsigned i = 0; i < frag_index_count; i++) {
@@ -538,7 +539,7 @@ __device__ void compute_base_w_fp32_hmma_cor(
 		nvcuda::wmma::store_matrix_sync(smem_workspace_large_1_ptr + (threadIdx.x & 0xffffffe0u) + k * smem_n, frag_w[k], smem_ldm, nvcuda::wmma::mem_col_major);
 	}
 	if (threadIdx.x < m) {
-		for (unsigned k = 0; k < n; k++) {
+		for (unsigned k = 0; k < real_block_n; k++) {
 			smem_workspace_large_1_ptr[threadIdx.x + k * smem_ldm] *= smem_t_ptr[k];
 		}
 	}
@@ -662,7 +663,7 @@ __device__ void update_a_fp32_hmma_cor(
 
 			// Save
 			//if (threadIdx.x < smem_n * smem_n) {
-			smem_workspace_large_2_ptr[bn * smem_n * smem_n + threadIdx.x] = -smem_workspace_small_ptr[threadIdx.x];
+			smem_workspace_large_2_ptr[bn * smem_n + threadIdx.x] = -smem_workspace_small_ptr[threadIdx.x];
 			//}
 		}
 	}
@@ -677,7 +678,7 @@ __device__ void update_a_fp32_hmma_cor(
 		nvcuda::wmma::fragment<nvcuda::wmma::matrix_b, smem_n, smem_n, smem_n, half, nvcuda::wmma::col_major> frag_WtA, frag_d_WtA;
 		// Load WtA
 		mtk::wmma::foreach<decltype(frag_WtA)>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
-					const auto v = smem_workspace_large_2_ptr[mem_index + bn * smem_n * smem_n];
+					const auto v = smem_workspace_large_2_ptr[mem_index + bn * smem_n];
 					const auto hv = cutf::type::cast<half>(v);
 					const auto dhv = cutf::type::cast<half>((v - cutf::type::cast<float>(hv)) * cor_scale);
 					for (unsigned i = 0; i < frag_index_count; i++) {
