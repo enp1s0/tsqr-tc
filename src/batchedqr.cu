@@ -20,7 +20,7 @@
 	__syncthreads();
 #else
 #define MTK_DEBUG_PRINT_MATRIX(ptr, m, n, ldm, name)
-#define MTK_DEBUG_CALL_FUNC(func);
+#define MTK_DEBUG_CALL_FUNC(func)
 #endif
 
 namespace {
