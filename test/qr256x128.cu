@@ -24,11 +24,9 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 	auto dY_uptr = cutf::memory::get_device_unique_ptr<compute_t>(m * n * batch_size);
 
 	// initialize input matrix
-#pragma omp parallel
 	{
 		std::mt19937 mt(std::random_device{}());
 		std::uniform_real_distribution<float> dist(-rand_abs_max, rand_abs_max);
-#pragma omp for
 		for (unsigned i = 0; i < m * n * batch_size; i++) {
 			hA_uptr.get()[i] = cutf::type::cast<compute_t>(dist(mt));
 		}
