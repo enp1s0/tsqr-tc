@@ -32,7 +32,7 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 		}
 	}
 
-	cutf::debug::print::print_matrix(hA_uptr.get(), m, n, "A (input)");
+	cutf::debug::print::print_numpy_matrix(hA_uptr.get(), m, n, "A");
 	cutf::memory::copy(dR_uptr.get(), hA_uptr.get(), m * n);
 	cutf::memory::copy(dA_uptr.get(), hA_uptr.get(), m * n);
 
@@ -56,9 +56,9 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 	cutf::memory::copy(hW_uptr.get(), dW_uptr.get(), m * n * batch_size);
 	cutf::memory::copy(hY_uptr.get(), dY_uptr.get(), m * n * batch_size);
 
-	cutf::debug::print::print_matrix(hA_uptr.get(), m, n, "R (output)");
-	cutf::debug::print::print_matrix(hW_uptr.get(), m, n, "W (output)");
-	cutf::debug::print::print_matrix(hY_uptr.get(), m, n, "Y (output)");
+	cutf::debug::print::print_numpy_matrix(hA_uptr.get(), m, n, "R (output)");
+	cutf::debug::print::print_numpy_matrix(hW_uptr.get(), m, n, "W (output)");
+	cutf::debug::print::print_numpy_matrix(hY_uptr.get(), m, n, "Y (output)");
 
 	// Compute using cusolver
 	if (batch_size == 1) {
@@ -66,7 +66,7 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 		auto hR_cusolver_uptr = cutf::memory::get_host_unique_ptr<compute_t>(n * n);
 		auto hQ_cusolver_uptr = cutf::memory::get_host_unique_ptr<compute_t>(m * n);
 		CUTF_CHECK_ERROR(cudaMemset(hQ_cusolver_uptr.get(), 0, m * n));
-		CUTF_CHECK_ERROR(cudaMemset(hR_cusolver_uptr.get(), 0, m * n));
+		CUTF_CHECK_ERROR(cudaMemset(hR_cusolver_uptr.get(), 0, n * n));
 		mtk::tsqr_tc::test_utils::qr_cublas(
 				hQ_cusolver_uptr.get(), m,
 				hR_cusolver_uptr.get(), n,
@@ -75,8 +75,8 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 				*cusolver_handle.get()
 				);
 		CUTF_CHECK_ERROR(cudaDeviceSynchronize());
-		cutf::debug::print::print_matrix(hR_cusolver_uptr.get(), n, n, "R (cusolver output)");
-		cutf::debug::print::print_matrix(hQ_cusolver_uptr.get(), m, n, "Q (cusolver output)");
+		cutf::debug::print::print_numpy_matrix(hR_cusolver_uptr.get(), n, n, "R (cusolver output)");
+		cutf::debug::print::print_numpy_matrix(hQ_cusolver_uptr.get(), m, n, "Q (cusolver output)");
 	}
 
 	auto cublas_handle = cutf::cublas::get_cublas_unique_ptr();
@@ -102,5 +102,5 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 }
 
 int main() {
-	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_hmma_cor>(32, 32, 1);
+	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_hmma_cor>(256, 256, 1);
 }
