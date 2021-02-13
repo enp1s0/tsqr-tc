@@ -385,6 +385,7 @@ template <unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
 __device__ void compute_base_w_fp32_hmma_cor(
 		float* const smem_workspace_large_0_ptr,
 		float* const smem_workspace_large_1_ptr,
+		float* const smem_workspace_large_2_ptr,
 		float* const smem_workspace_small_ptr,
 		const float* const smem_t_ptr,
 		const float* const gmem_W_ptr, const std::size_t ldW,
@@ -467,7 +468,7 @@ __device__ void compute_base_w_fp32_hmma_cor(
 
 			// Save
 			//if (threadIdx.x < smem_n * smem_n) {
-			smem_workspace_large_0_ptr[bn * smem_n * smem_n + threadIdx.x] = -smem_workspace_small_ptr[threadIdx.x];
+			smem_workspace_large_2_ptr[bn * smem_n * smem_n + threadIdx.x] = -smem_workspace_small_ptr[threadIdx.x];
 			//}
 		}
 	}
@@ -482,7 +483,7 @@ __device__ void compute_base_w_fp32_hmma_cor(
 		nvcuda::wmma::fragment<nvcuda::wmma::matrix_b, smem_n, smem_n, smem_n, half, nvcuda::wmma::col_major> frag_YY, frag_d_YY;
 		// Load YY
 		mtk::wmma::foreach<decltype(frag_YY)>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
-					const auto v = smem_workspace_large_0_ptr[mem_index];
+					const auto v = smem_workspace_large_2_ptr[mem_index];
 					const auto hv = cutf::type::cast<half>(v);
 					const auto dhv = cutf::type::cast<half>((v - cutf::type::cast<float>(hv)) * cor_scale);
 					for (unsigned i = 0; i < frag_index_count; i++) {
@@ -524,7 +525,6 @@ __device__ void compute_base_w_fp32_hmma_cor(
 		}
 	}
 
-	copy_matrix_g2s<smem_m, smem_n, smem_ldm>(smem_workspace_large_0_ptr, gmem_Y_ptr + n * ldW, ldW, m, real_block_n);
 	for (unsigned k = 0; k < num_col_block; k++) {
 		nvcuda::wmma::load_matrix_sync(frag_d_w[k], smem_workspace_large_0_ptr + (threadIdx.x & 0xffffffe0u) + k * smem_n, smem_ldm, nvcuda::wmma::mem_col_major);
 	}
@@ -549,6 +549,7 @@ template <mtk::tsqr_tc::compute_mode::type compute_mode, unsigned smem_m, unsign
 __device__ void compute_base_w(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_workspace_large_0_ptr,
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_workspace_large_1_ptr,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_workspace_large_2_ptr,
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_workspace_small_ptr,
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_t_ptr,
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_W_ptr, const std::size_t ldW,
@@ -561,6 +562,7 @@ __device__ void compute_base_w(
 		compute_base_w_fp32_hmma_cor<smem_m, smem_n, smem_ldm>(
 				smem_workspace_large_0_ptr,
 				smem_workspace_large_1_ptr,
+				smem_workspace_large_2_ptr,
 				smem_workspace_small_ptr,
 				smem_t_ptr,
 				gmem_W_ptr, ldW,
@@ -793,6 +795,7 @@ __device__ void qr_kernel(
 		compute_base_w<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(
 				smem_Y_ptr,
 				smem_W_ptr,
+				smem_A_ptr,
 				smem_tmp_ptr,
 				smem_t_ptr,
 				gmem_w_ptr, ldw,
