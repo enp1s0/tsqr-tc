@@ -6,6 +6,8 @@ namespace tsqr_tc {
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
 class tsqr_buffer {
 	using buffer_type = typename mtk::tsqr_tc::detail::get_type<compute_mode>;
+	const std::size_t BQR_MAX_M = 256lu;
+
 	std::size_t m, n;
 	buffer_type* r_buffer_ptr;
 	buffer_type* w_buffer_ptr;
@@ -22,6 +24,12 @@ public:
 	buffer_type* get_w_buffer_ptr() const {return w_buffer_ptr;}
 	buffer_type* get_y_buffer_ptr() const {return y_buffer_ptr;}
 	std::size_t* get_index_buffer_ptr() const {return index_buffer_ptr;}
+
+	std::size_t get_r_buffer_count() const;
+	std::size_t get_y_buffer_count() const;
+	std::size_t get_w_buffer_count() const;
+	std::size_t get_index_buffer_count() const;
+	std::size_t get_split_count() const;
 };
 } // namespace tsqr_tc
 } // namespace mtk
