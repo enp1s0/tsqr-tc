@@ -462,10 +462,12 @@ __device__ void compute_base_w_fp32_hmma_cor(
 			// Accumulate
 			__syncthreads();
 			accumulate_vectors<smem_m>(smem_workspace_small_ptr, smem_n * smem_n);
+			MTK_DEBUG_CALL_FUNC(printf("base YtY (%lu/%lu)\n", bn + 1, n));
+			MTK_DEBUG_PRINT_MATRIX(smem_workspace_small_ptr, smem_n, smem_n, smem_n, "");
 
 			// Save
 			//if (threadIdx.x < smem_n * smem_n) {
-			smem_workspace_large_0_ptr[bn * smem_n * smem_n + threadIdx.x] = smem_workspace_small_ptr[threadIdx.x] * smem_t_ptr[threadIdx.x >> 4];
+			smem_workspace_large_0_ptr[bn * smem_n * smem_n + threadIdx.x] = -smem_workspace_small_ptr[threadIdx.x];
 			//}
 		}
 	}
@@ -524,7 +526,7 @@ __device__ void compute_base_w_fp32_hmma_cor(
 
 	copy_matrix_g2s<smem_m, smem_n, smem_ldm>(smem_workspace_large_0_ptr, gmem_Y_ptr + n * ldW, ldW, m, real_block_n);
 	for (unsigned k = 0; k < num_col_block; k++) {
-		nvcuda::wmma::load_matrix_sync(frag_d_w[k], smem_workspace_large_0_ptr + (threadIdx.x & 0xffffffe0u), smem_ldm, nvcuda::wmma::mem_col_major);
+		nvcuda::wmma::load_matrix_sync(frag_d_w[k], smem_workspace_large_0_ptr + (threadIdx.x & 0xffffffe0u) + k * smem_n, smem_ldm, nvcuda::wmma::mem_col_major);
 	}
 
 	for (unsigned k = 0; k < num_col_block; k++) {
@@ -533,8 +535,14 @@ __device__ void compute_base_w_fp32_hmma_cor(
 		}
 	}
 	for (unsigned k = 0; k < num_col_block; k++) {
-		nvcuda::wmma::store_matrix_sync(smem_workspace_large_1_ptr + (threadIdx.x & 0xffffffe0u), frag_w[k], smem_ldm, nvcuda::wmma::mem_col_major);
+		nvcuda::wmma::store_matrix_sync(smem_workspace_large_1_ptr + (threadIdx.x & 0xffffffe0u) + k * smem_n, frag_w[k], smem_ldm, nvcuda::wmma::mem_col_major);
 	}
+	if (threadIdx.x < m) {
+		for (unsigned k = 0; k < n; k++) {
+			smem_workspace_large_1_ptr[threadIdx.x + k * smem_ldm] *= smem_t_ptr[k];
+		}
+	}
+	__syncthreads();
 }
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode, unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
@@ -792,6 +800,7 @@ __device__ void qr_kernel(
 				m, n_block * DIM_BLOCK_N,
 				real_block_n
 				);
+		MTK_DEBUG_PRINT_MATRIX(smem_W_ptr, m, real_block_n, DIM_MAX_M, "base W (Block Result)");
 		compute_w<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(
 				smem_W_ptr,
 				smem_tmp_ptr,
