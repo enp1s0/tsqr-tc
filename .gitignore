@@ -70,5 +70,7 @@ Sessionx.vim
 tags
 # Persistent undo
 [._]*.un~
+# lsp
+*.json
 
 # End of https://www.toptal.com/developers/gitignore/api/vim,c++,cuda
