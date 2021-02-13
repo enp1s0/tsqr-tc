@@ -65,13 +65,9 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 	const auto elapsed_time = std::chrono::duration_cast<std::chrono::nanoseconds>(end_clock - start_clock).count() * 1e-9;
 	std::printf("%20s : %e [s]\n", "time", elapsed_time);
 	const auto compute_complexity = [](const unsigned m, const unsigned n) -> unsigned {
-		return 4 * m * n * n + 36 * m * n;
-	};
-	const auto compute_complexity_tc = [](const unsigned m, const unsigned n) -> unsigned {
-		return 4 * m * n * n + 64 * 16 * m + 64 * m * n;
+		return 4 * m * n * n + 64 * m * n;
 	};
 	std::printf("%20s : %e [TFlop/s]\n", "performance", compute_complexity(m, n) * batch_size / elapsed_time / 1e12);
-	std::printf("%20s : %e [TFlop/s]\n", "performance [TC]", compute_complexity_tc(m, n) * batch_size / elapsed_time / 1e12);
 
 	cutf::memory::copy(hA_uptr.get(), dR_uptr.get(), m * n * batch_size);
 	cutf::memory::copy(hW_uptr.get(), dW_uptr.get(), m * n * batch_size);
