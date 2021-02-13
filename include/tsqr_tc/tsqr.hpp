@@ -34,6 +34,15 @@ public:
 	std::size_t get_index_buffer_count() const;
 	std::size_t get_split_count() const;
 };
+
+template <mtk::tsqr_tc::compute_mode::type compute_mode>
+void tsqr(
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>* r_ptr, const std::size_t ld_R,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>* w_ptr, const std::size_t ld_W,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>* y_ptr, const std::size_t ld_Y,
+		const std::size_t m, const std::size_t n,
+		mtk::tsqr_tc::tsqr_buffer<compute_mode>& buffer
+		);
 } // namespace tsqr_tc
 } // namespace mtk
 #endif
