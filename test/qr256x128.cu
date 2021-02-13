@@ -1,4 +1,5 @@
 #include <iostream>
+#include <chrono>
 #include <random>
 #include <cutf/memory.hpp>
 #include <cutf/type.hpp>
@@ -47,6 +48,7 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 	}
 	cutf::memory::copy(d_start_m_list.get(), h_start_m_list.get(), batch_size + 1);
 
+	const auto start_clock = std::chrono::high_resolution_clock::now();
 	mtk::tsqr_tc::qr256x128_batched<compute_mode>(
 			dW_uptr.get(), m * batch_size,
 			dY_uptr.get(), m * batch_size,
@@ -55,6 +57,10 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 			batch_size,
 			d_start_m_list.get()
 			);
+	CUTF_CHECK_ERROR(cudaDeviceSynchronize());
+	const auto end_clock = std::chrono::high_resolution_clock::now();
+	const auto elapsed_time = std::chrono::duration_cast<std::chrono::nanoseconds>(end_clock - start_clock).count() * 1e-9;
+	std::printf("%20s : %e [s]\n", "time", elapsed_time);
 
 	cutf::memory::copy(hA_uptr.get(), dR_uptr.get(), m * n * batch_size);
 	cutf::memory::copy(hW_uptr.get(), dW_uptr.get(), m * n * batch_size);
@@ -85,26 +91,27 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 	}
 #endif
 
-	auto cublas_handle = cutf::cublas::get_cublas_unique_ptr();
+	if (batch_size == 1) {
+		auto cublas_handle = cutf::cublas::get_cublas_unique_ptr();
 
-	const auto residual = mtk::tsqr_tc::test_utils::compute_residual_in_dp(
-			dR_uptr.get(), m,
-			dW_uptr.get(), m,
-			dY_uptr.get(), m,
-			dA_uptr.get(), m,
-			m, n,
-			*cublas_handle.get()
-			);
+		const auto residual = mtk::tsqr_tc::test_utils::compute_residual_in_dp(
+				dR_uptr.get(), m,
+				dW_uptr.get(), m,
+				dY_uptr.get(), m,
+				dA_uptr.get(), m,
+				m, n,
+				*cublas_handle.get()
+				);
 
-	const auto orthogonality = mtk::tsqr_tc::test_utils::compute_orthogonality_in_dp(
-			dW_uptr.get(), m,
-			dY_uptr.get(), m,
-			m, n,
-			*cublas_handle.get()
-			);
-
-	std::printf("residual = %e\n", residual);
-	std::printf("orthogonality = %e\n", orthogonality);
+		const auto orthogonality = mtk::tsqr_tc::test_utils::compute_orthogonality_in_dp(
+				dW_uptr.get(), m,
+				dY_uptr.get(), m,
+				m, n,
+				*cublas_handle.get()
+				);
+		std::printf("%20s : %e\n", "residual", residual);
+		std::printf("%20s : %e\n", "orthogonality", orthogonality);
+	}
 }
 
 int main() {
