@@ -905,11 +905,13 @@ void mtk::tsqr_tc::qr256x128(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_y_ptr, const std::size_t ldy,
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_a_ptr, const std::size_t lda,
 		const std::size_t m,
-		const std::size_t n) {
+		const std::size_t n,
+		const cudaStream_t cuda_stream
+		) {
 	const unsigned block_size = 256;
 	const unsigned smem_size = 58432; //[B]
 	cudaFuncSetAttribute(qr256x128_kernel<compute_mode>, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size);
-	qr256x128_kernel<compute_mode><<<1, block_size, smem_size>>>(
+	qr256x128_kernel<compute_mode><<<1, block_size, smem_size, cuda_stream>>>(
 			gmem_w_ptr, ldw,
 			gmem_y_ptr, ldy,
 			gmem_a_ptr, lda,
@@ -923,7 +925,9 @@ template void mtk::tsqr_tc::qr256x128<compute_mode>( \
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
 		const std::size_t, \
-		const std::size_t)
+		const std::size_t, \
+		const cudaStream_t \
+		)
 
 QR256X128_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_hmma_cor);
 
@@ -934,12 +938,13 @@ void mtk::tsqr_tc::qr256x128_batched(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_a_ptr, const std::size_t lda,
 		const std::size_t n,
 		const std::size_t batch_size,
-		const std::size_t* const start_m_list
+		const std::size_t* const start_m_list,
+		const cudaStream_t cuda_stream
 		) {
 	const unsigned block_size = 256;
 	const unsigned smem_size = 58432; //[B]
 	cudaFuncSetAttribute(qr256x128_batched_kernel<compute_mode>, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size);
-	qr256x128_batched_kernel<compute_mode><<<batch_size, block_size, smem_size>>>(
+	qr256x128_batched_kernel<compute_mode><<<batch_size, block_size, smem_size, cuda_stream>>>(
 			gmem_w_ptr, ldw,
 			gmem_y_ptr, ldy,
 			gmem_a_ptr, lda,
@@ -956,7 +961,8 @@ template void mtk::tsqr_tc::qr256x128_batched<compute_mode>( \
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
 		const std::size_t, \
 		const std::size_t, \
-		const std::size_t* const \
+		const std::size_t* const, \
+		const cudaStream_t \
 		)
 
 QR256X128_BATCHED_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_hmma_cor);
