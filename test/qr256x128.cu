@@ -15,6 +15,9 @@ constexpr float rand_abs_max = 1.0f;
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
 void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_size) {
+	std::printf("# --- TEST --- %s / %s\n", __FILE__, __func__);
+	std::printf("%20s : %u x %u\n", "input size", m, n);
+	std::printf("%20s : %lu\n", "batch size", batch_size);
 	using compute_t = typename mtk::tsqr_tc::detail::get_type<compute_mode>::type;
 	auto hA_uptr = cutf::memory::get_host_unique_ptr<compute_t>(m * n * batch_size);
 	auto hW_uptr = cutf::memory::get_host_unique_ptr<compute_t>(m * n * batch_size);
