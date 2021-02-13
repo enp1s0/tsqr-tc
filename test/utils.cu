@@ -190,7 +190,7 @@ template <class T>
 __global__ void cut_r_kernel(
 		T* const dst, const std::size_t ld_dst,
 		const T* const src, const std::size_t ld_src,
-		const std::size_t m, const std::size_t n) {
+		const std::size_t n) {
 	const auto tid = blockIdx.x * blockDim.x + threadIdx.x;
 
 	const auto x = tid / n;
@@ -204,12 +204,12 @@ __global__ void cut_r_kernel(
 template <class T>
 void cut_r(T* const dst, const std::size_t ld_dst,
 		const T* const src, const std::size_t ld_src,
-		const std::size_t m, const std::size_t n) {
+		const std::size_t n) {
 	constexpr std::size_t block_size = 256;
 	cut_r_kernel<T><<<(n * n + block_size - 1) / block_size, block_size>>>(
 			dst, ld_dst,
 			src, ld_src,
-			m, n
+			n
 			);
 }
 }
@@ -231,11 +231,11 @@ void mtk::tsqr_tc::test_utils::qr_cublas(
 	int geqrf_working_memory_size, gqr_working_memory_size;
 	CUTF_CHECK_ERROR(cutf::cusolver::dn::geqrf_buffer_size(
 				cusolver_handle, m, n,
-				dQ_ptr, m, &geqrf_working_memory_size
+				dQ_ptr, ld_Q, &geqrf_working_memory_size
 				));
 	CUTF_CHECK_ERROR(cutf::cusolver::dn::gqr_buffer_size(
 				cusolver_handle, m, n, n,
-				dQ_ptr, m, d_tau.get(), &gqr_working_memory_size
+				dQ_ptr, ld_Q, d_tau.get(), &gqr_working_memory_size
 				));
 
 	auto d_geqrf_working_memory = cutf::memory::get_device_unique_ptr<T>(geqrf_working_memory_size);
@@ -244,18 +244,18 @@ void mtk::tsqr_tc::test_utils::qr_cublas(
 
 	CUTF_CHECK_ERROR(cutf::cusolver::dn::geqrf(
 				cusolver_handle, m, n,
-				dQ_ptr, m, d_tau.get(), d_geqrf_working_memory.get(),
+				dQ_ptr, ld_Q, d_tau.get(), d_geqrf_working_memory.get(),
 				geqrf_working_memory_size, d_info.get()
 				));
 	cut_r(
 			dR_ptr, ld_R,
 			dQ_ptr, ld_A,
-			m, n
+			n
 			);
 
 	CUTF_CHECK_ERROR(cutf::cusolver::dn::gqr(
 				cusolver_handle, m, n, n,
-				dQ_ptr, m,
+				dQ_ptr, ld_Q,
 				d_tau.get(), d_gqr_working_memory.get(), gqr_working_memory_size,
 				d_info.get()
 				));
