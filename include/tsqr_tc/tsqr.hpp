@@ -5,9 +5,10 @@ namespace mtk {
 namespace tsqr_tc {
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
 class tsqr_buffer {
+public:
 	using buffer_type = typename mtk::tsqr_tc::detail::get_type<compute_mode>;
-	const std::size_t BQR_MAX_M = 256lu;
-
+	static const std::size_t BQR_MAX_M = 256lu;
+private:
 	std::size_t m, n;
 	buffer_type* r_buffer_ptr;
 	buffer_type* w_buffer_ptr;
