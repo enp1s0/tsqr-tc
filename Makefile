@@ -19,7 +19,8 @@ OBJS=$(SRCS:%.cu=$(OBJDIR)/%.o)
 DLINKOBJS=$(SRCS:%.cu=$(OBJDIR)/%.dlink.oo)
 HEADERS=$(shell find $(INCLUDEDIR) -name '*.cuh' -o -name '*.hpp' -o -name '*.h')
 
-all: $(LIBDIR)/$(TARGET) tests
+all: $(LIBDIR)/$(TARGET)
+	make tests
 
 $(LIBDIR)/$(TARGET): $(OBJS)
 	[ -d $(LIBDIR) ] || mkdir $(LIBDIR)
