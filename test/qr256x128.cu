@@ -8,6 +8,8 @@
 #include <tsqr_tc/batchedqr.hpp>
 #include "utils.hpp"
 
+//#define MTK_PRINT_MATRICES
+
 constexpr float rand_abs_max = 1.0f;
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
@@ -32,7 +34,9 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 		}
 	}
 
+#ifdef MTK_PRINT_MATRICES
 	cutf::debug::print::print_numpy_matrix(hA_uptr.get(), m, n, "A");
+#endif
 	cutf::memory::copy(dR_uptr.get(), hA_uptr.get(), m * n);
 	cutf::memory::copy(dA_uptr.get(), hA_uptr.get(), m * n);
 
@@ -56,6 +60,7 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 	cutf::memory::copy(hW_uptr.get(), dW_uptr.get(), m * n * batch_size);
 	cutf::memory::copy(hY_uptr.get(), dY_uptr.get(), m * n * batch_size);
 
+#ifdef MTK_PRINT_MATRICES
 	cutf::debug::print::print_numpy_matrix(hA_uptr.get(), m, n, "R (output)");
 	cutf::debug::print::print_numpy_matrix(hW_uptr.get(), m, n, "W (output)");
 	cutf::debug::print::print_numpy_matrix(hY_uptr.get(), m, n, "Y (output)");
@@ -78,6 +83,7 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 		cutf::debug::print::print_numpy_matrix(hR_cusolver_uptr.get(), n, n, "R (cusolver output)");
 		cutf::debug::print::print_numpy_matrix(hQ_cusolver_uptr.get(), m, n, "Q (cusolver output)");
 	}
+#endif
 
 	auto cublas_handle = cutf::cublas::get_cublas_unique_ptr();
 
