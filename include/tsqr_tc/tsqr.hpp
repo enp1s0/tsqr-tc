@@ -40,8 +40,10 @@ void tsqr(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>* r_ptr, const std::size_t ld_R,
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>* w_ptr, const std::size_t ld_W,
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>* y_ptr, const std::size_t ld_Y,
+		const typename mtk::tsqr_tc::detail::get_type<compute_mode>* a_ptr, const std::size_t ld_A,
 		const std::size_t m, const std::size_t n,
-		mtk::tsqr_tc::tsqr_buffer<compute_mode>& buffer
+		mtk::tsqr_tc::tsqr_buffer<compute_mode>& buffer,
+		const cudaStream_t cuda_stream
 		);
 } // namespace tsqr_tc
 } // namespace mtk
