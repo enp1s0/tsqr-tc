@@ -33,6 +33,8 @@ public:
 	std::size_t get_w_buffer_count() const;
 	std::size_t get_index_buffer_count() const;
 	std::size_t get_split_count() const;
+
+	std::size_t get_buffer_size() const;
 };
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode>

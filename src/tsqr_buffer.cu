@@ -37,6 +37,12 @@ std::size_t mtk::tsqr_tc::tsqr_buffer<compute_mode>::get_index_buffer_count() co
 	return get_split_count() + 1;
 }
 
+template <mtk::tsqr_tc::compute_mode::type compute_mode>
+std::size_t mtk::tsqr_tc::tsqr_buffer<compute_mode>::get_buffer_size() const {
+	return sizeof(typename mtk::tsqr_tc::tsqr_buffer<compute_mode>::buffer_type) * (get_w_buffer_count() + get_y_buffer_count() + get_r_buffer_count())
+		+ sizeof(std::size_t) * get_index_buffer_count();
+}
+
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
 void mtk::tsqr_tc::tsqr_buffer<compute_mode>::allocate() {
