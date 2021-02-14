@@ -785,7 +785,8 @@ template <mtk::tsqr_tc::compute_mode::type compute_mode>
 __device__ void qr_kernel(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_w_ptr, const std::size_t ldw,
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_y_ptr, const std::size_t ldy,
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_a_ptr, const std::size_t lda,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_r_ptr, const std::size_t ldr,
+		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_a_ptr, const std::size_t lda,
 		const std::size_t m,
 		const std::size_t n
 		) {
@@ -865,8 +866,8 @@ __device__ void qr_kernel(
 		}
 		MTK_DEBUG_PRINT_MATRIX(smem_Y_ptr, m, real_block_n, DIM_MAX_M, "Y (Block Result)");
 		MTK_DEBUG_PRINT_MATRIX(smem_t_ptr, 1, real_block_n, 1, "t (Block Result)");
-		// Store block Y
-		copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_a_ptr + lda * n_block * DIM_BLOCK_N, lda, smem_A_ptr, m, real_block_n);
+		// Store block Y and R
+		copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_r_ptr + ldr * n_block * DIM_BLOCK_N, ldr, smem_A_ptr, n, real_block_n);
 		copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_y_ptr + ldy * n_block * DIM_BLOCK_N, ldy, smem_Y_ptr, m, real_block_n);
 
 		// Compute W
@@ -899,12 +900,14 @@ template <mtk::tsqr_tc::compute_mode::type compute_mode>
 __global__ void qr256x128_kernel(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_w_ptr, const std::size_t ldw,
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_y_ptr, const std::size_t ldy,
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_a_ptr, const std::size_t lda,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_r_ptr, const std::size_t ldr,
+		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_a_ptr, const std::size_t lda,
 		const std::size_t m,
 		const std::size_t n) {
 	qr_kernel<compute_mode>(
 			gmem_w_ptr, ldw,
 			gmem_y_ptr, ldy,
+			gmem_r_ptr, ldr,
 			gmem_a_ptr, lda,
 			m, n
 			);
@@ -914,7 +917,8 @@ template <mtk::tsqr_tc::compute_mode::type compute_mode>
 __global__ void qr256x128_batched_kernel(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_w_ptr, const std::size_t ldw,
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_y_ptr, const std::size_t ldy,
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_a_ptr, const std::size_t lda,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_r_ptr, const std::size_t ldr,
+		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_a_ptr, const std::size_t lda,
 		const std::size_t n,
 		const std::size_t batch_size,
 		const std::size_t* const start_m_list) {
@@ -925,6 +929,7 @@ __global__ void qr256x128_batched_kernel(
 	qr_kernel<compute_mode>(
 			gmem_w_ptr + start_m, ldw,
 			gmem_y_ptr + start_m, ldy,
+			gmem_r_ptr + matrix_id * n, ldr,
 			gmem_a_ptr + start_m, lda,
 			m, n
 			);
@@ -935,7 +940,8 @@ template <mtk::tsqr_tc::compute_mode::type compute_mode>
 void mtk::tsqr_tc::qr256x128(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_w_ptr, const std::size_t ldw,
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_y_ptr, const std::size_t ldy,
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_a_ptr, const std::size_t lda,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_r_ptr, const std::size_t ldr,
+		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_a_ptr, const std::size_t lda,
 		const std::size_t m,
 		const std::size_t n,
 		const cudaStream_t cuda_stream
@@ -946,6 +952,7 @@ void mtk::tsqr_tc::qr256x128(
 	qr256x128_kernel<compute_mode><<<1, block_size, smem_size, cuda_stream>>>(
 			gmem_w_ptr, ldw,
 			gmem_y_ptr, ldy,
+			gmem_r_ptr, ldr,
 			gmem_a_ptr, lda,
 			m, n
 			);
@@ -956,6 +963,7 @@ template void mtk::tsqr_tc::qr256x128<compute_mode>( \
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
+		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
 		const std::size_t, \
 		const std::size_t, \
 		const cudaStream_t \
@@ -967,7 +975,8 @@ template <mtk::tsqr_tc::compute_mode::type compute_mode>
 void mtk::tsqr_tc::qr256x128_batched(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_w_ptr, const std::size_t ldw,
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_y_ptr, const std::size_t ldy,
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_a_ptr, const std::size_t lda,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_r_ptr, const std::size_t ldr,
+		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_a_ptr, const std::size_t lda,
 		const std::size_t n,
 		const std::size_t batch_size,
 		const std::size_t* const start_m_list,
@@ -979,6 +988,7 @@ void mtk::tsqr_tc::qr256x128_batched(
 	qr256x128_batched_kernel<compute_mode><<<batch_size, block_size, smem_size, cuda_stream>>>(
 			gmem_w_ptr, ldw,
 			gmem_y_ptr, ldy,
+			gmem_r_ptr, ldr,
 			gmem_a_ptr, lda,
 			n,
 			batch_size,
@@ -991,6 +1001,7 @@ template void mtk::tsqr_tc::qr256x128_batched<compute_mode>( \
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
+		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
 		const std::size_t, \
 		const std::size_t, \
 		const std::size_t* const, \
