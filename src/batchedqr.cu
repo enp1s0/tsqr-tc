@@ -43,64 +43,6 @@ __device__ void fill_zero(T* const ptr) {
 	}
 }
 
-// This function copies matrix data from global memory to shared memory
-// Ristrictions:
-// - smem_m == block_size
-template <unsigned block_size, unsigned smem_n, unsigned smem_ld, class SMEM_T, class GMEM_T>
-__device__ void copy_matrix_g2s(
-		SMEM_T* const smem,
-		const GMEM_T* const gmem_ptr, const std::size_t gmem_ld,
-		const std::size_t m, const std::size_t n
-		) {
-	if (m == block_size) {
-		unsigned i_n = 0;
-		for (; i_n < n; i_n++) {
-			const auto v = gmem_ptr[gmem_ld * i_n + threadIdx.x];
-			smem[smem_ld * i_n + threadIdx.x] = cutf::type::cast<SMEM_T>(v);
-		}
-		for (; i_n < smem_n; i_n++) {
-			smem[smem_ld * i_n + threadIdx.x] = cutf::type::cast<SMEM_T>(0.0f);
-		}
-	} else {
-		unsigned i_n = 0;
-		for (; i_n < n; i_n++) {
-			auto v = cutf::type::cast<GMEM_T>(0.0f);
-			if (threadIdx.x < m) {
-				v = gmem_ptr[gmem_ld * i_n + threadIdx.x];
-			}
-			smem[smem_ld * i_n + threadIdx.x] = cutf::type::cast<SMEM_T>(v);
-		}
-		for (; i_n < smem_n; i_n++) {
-			smem[smem_ld * i_n + threadIdx.x] = cutf::type::cast<SMEM_T>(0.0f);
-		}
-	}
-}
-
-// This function copies matrix data from shared memory to global memory
-// Ristrictions:
-// - smem_m == block_size
-template <unsigned block_size, unsigned smem_n, unsigned smem_ld, class SMEM_T, class GMEM_T>
-__device__ void copy_matrix_s2g(
-		GMEM_T* const gmem_ptr, const std::size_t gmem_ld,
-		const SMEM_T* const smem,
-		const std::size_t m, const std::size_t n
-		) {
-	if (m == block_size) {
-		unsigned i_n = 0;
-		for (; i_n < n; i_n++) {
-			const auto v = smem[smem_ld * i_n + threadIdx.x];
-			gmem_ptr[gmem_ld * i_n + threadIdx.x] = cutf::type::cast<GMEM_T>(v);
-		}
-	} else {
-		if (threadIdx.x < m) {
-			for (unsigned i_n = 0; i_n < n; i_n++) {
-				const auto v = smem[smem_ld * i_n + threadIdx.x];
-				gmem_ptr[gmem_ld * i_n + threadIdx.x] = cutf::type::cast<GMEM_T>(v);
-			}
-		}
-	}
-}
-
 // This function computes L2-norm ^2 of a given vector(array).
 // Restrictions:
 // - size % warp_size == 0
@@ -441,7 +383,7 @@ __device__ void compute_base_w_fp32_hmma_cor(
 			nvcuda::wmma::fragment<nvcuda::wmma::matrix_a, smem_n, smem_n, smem_n, half, nvcuda::wmma::row_major> frag_Yt[num_col_block], frag_d_Yt[num_col_block];
 			nvcuda::wmma::fragment<nvcuda::wmma::accumulator, smem_n, smem_n, smem_n, float> frag_tmp, frag_d_tmp;
 
-			copy_matrix_g2s<smem_m, smem_n, smem_ldm>(smem_workspace_large_1_ptr, gmem_Y_ptr + bn * ldY, ldY, m, smem_n);
+			mtk::tsqr_tc::utils::copy_matrix_g2s<smem_m, smem_n, smem_ldm>(smem_workspace_large_1_ptr, gmem_Y_ptr + bn * ldY, ldY, m, smem_n);
 
 			// Load Yt
 			mtk::wmma::foreach<decltype(frag_Yt[0])>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
@@ -510,7 +452,7 @@ __device__ void compute_base_w_fp32_hmma_cor(
 					}
 				});
 
-		copy_matrix_g2s<smem_m, smem_n, smem_ldm>(smem_workspace_large_1_ptr, gmem_W_ptr + bn * ldW, ldW, m, smem_n);
+		mtk::tsqr_tc::utils::copy_matrix_g2s<smem_m, smem_n, smem_ldm>(smem_workspace_large_1_ptr, gmem_W_ptr + bn * ldW, ldW, m, smem_n);
 		nvcuda::wmma::fragment<nvcuda::wmma::matrix_a, smem_n, smem_n, smem_n, half, nvcuda::wmma::col_major> frag_W[num_col_block], frag_d_W[num_col_block];
 		// Load W
 		mtk::wmma::foreach<decltype(frag_W[0])>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
@@ -636,7 +578,7 @@ __device__ void update_a_fp32_hmma_cor(
 			nvcuda::wmma::fragment<nvcuda::wmma::matrix_a, smem_n, smem_n, smem_n, half, nvcuda::wmma::row_major> frag_Wt[num_col_block], frag_d_Wt[num_col_block];
 			nvcuda::wmma::fragment<nvcuda::wmma::accumulator, smem_n, smem_n, smem_n, float> frag_tmp, frag_d_tmp;
 
-			copy_matrix_g2s<smem_m, smem_n, smem_ldm>(smem_workspace_large_1_ptr, gmem_W_ptr + bn * ldW, ldW, m, smem_n);
+			mtk::tsqr_tc::utils::copy_matrix_g2s<smem_m, smem_n, smem_ldm>(smem_workspace_large_1_ptr, gmem_W_ptr + bn * ldW, ldW, m, smem_n);
 
 			// Load Wt
 			mtk::wmma::foreach<decltype(frag_Wt[0])>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
@@ -704,7 +646,7 @@ __device__ void update_a_fp32_hmma_cor(
 					}
 				});
 
-		copy_matrix_g2s<smem_m, smem_n, smem_ldm>(smem_workspace_large_1_ptr, gmem_Y_ptr + bn * ldY, ldY, m, smem_n);
+		mtk::tsqr_tc::utils::copy_matrix_g2s<smem_m, smem_n, smem_ldm>(smem_workspace_large_1_ptr, gmem_Y_ptr + bn * ldY, ldY, m, smem_n);
 		nvcuda::wmma::fragment<nvcuda::wmma::matrix_a, smem_n, smem_n, smem_n, half, nvcuda::wmma::col_major> frag_Y[num_col_block], frag_d_Y[num_col_block];
 		// Load W
 		mtk::wmma::foreach<decltype(frag_Y[0])>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
@@ -793,7 +735,7 @@ __device__ void qr_kernel(
 		fill_zero<block_size, DIM_MAX_M * DIM_BLOCK_N>(smem_Y_ptr);
 
 		const unsigned real_block_n = umin(DIM_BLOCK_N, n - DIM_BLOCK_N * n_block);
-		copy_matrix_g2s<block_size, DIM_BLOCK_N, DIM_MAX_M>(smem_A_ptr, gmem_a_ptr + lda * n_block * DIM_BLOCK_N, lda, m, real_block_n);
+		mtk::tsqr_tc::utils::copy_matrix_g2s<block_size, DIM_BLOCK_N, DIM_MAX_M>(smem_A_ptr, gmem_a_ptr + lda * n_block * DIM_BLOCK_N, lda, m, real_block_n);
 		MTK_DEBUG_PRINT_MATRIX(smem_A_ptr, m, real_block_n, DIM_MAX_M, "A (Before updating)");
 		update_a<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(
 				smem_A_ptr,
@@ -851,8 +793,8 @@ __device__ void qr_kernel(
 		MTK_DEBUG_PRINT_MATRIX(smem_Y_ptr, m, real_block_n, DIM_MAX_M, "Y (Block Result)");
 		MTK_DEBUG_PRINT_MATRIX(smem_t_ptr, 1, real_block_n, 1, "t (Block Result)");
 		// Store block Y and R
-		copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_r_ptr + ldr * n_block * DIM_BLOCK_N, ldr, smem_A_ptr, n, real_block_n);
-		copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_y_ptr + ldy * n_block * DIM_BLOCK_N, ldy, smem_Y_ptr, m, real_block_n);
+		mtk::tsqr_tc::utils::copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_r_ptr + ldr * n_block * DIM_BLOCK_N, ldr, smem_A_ptr, n, real_block_n);
+		mtk::tsqr_tc::utils::copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_y_ptr + ldy * n_block * DIM_BLOCK_N, ldy, smem_Y_ptr, m, real_block_n);
 
 		// Compute W
 		__syncthreads();
@@ -875,7 +817,7 @@ __device__ void qr_kernel(
 				smem_t_ptr,
 				m, n_block, real_block_n
 				);
-		copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_w_ptr + ldw * n_block * DIM_BLOCK_N, ldw, smem_W_ptr, m, real_block_n);
+		mtk::tsqr_tc::utils::copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_w_ptr + ldw * n_block * DIM_BLOCK_N, ldw, smem_W_ptr, m, real_block_n);
 		MTK_DEBUG_PRINT_MATRIX(smem_W_ptr, m, real_block_n, DIM_MAX_M, "W (Block Result)");
 	}
 }
