@@ -22,10 +22,11 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 	auto hA_uptr = cutf::memory::get_host_unique_ptr<compute_t>(m * n * batch_size);
 	auto hW_uptr = cutf::memory::get_host_unique_ptr<compute_t>(m * n * batch_size);
 	auto hY_uptr = cutf::memory::get_host_unique_ptr<compute_t>(m * n * batch_size);
+	auto hR_uptr = cutf::memory::get_host_unique_ptr<compute_t>(n * n * batch_size);
 	auto hI_uptr = cutf::memory::get_host_unique_ptr<compute_t>(m * m * batch_size);
 
 	auto dA_uptr = cutf::memory::get_device_unique_ptr<compute_t>(m * n * batch_size);
-	auto dR_uptr = cutf::memory::get_device_unique_ptr<compute_t>(m * n * batch_size);
+	auto dR_uptr = cutf::memory::get_device_unique_ptr<compute_t>(n * n * batch_size);
 	auto dW_uptr = cutf::memory::get_device_unique_ptr<compute_t>(m * n * batch_size);
 	auto dY_uptr = cutf::memory::get_device_unique_ptr<compute_t>(m * n * batch_size);
 
@@ -41,7 +42,6 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 #ifdef MTK_PRINT_MATRICES
 	cutf::debug::print::print_numpy_matrix(hA_uptr.get(), m, n, "A");
 #endif
-	cutf::memory::copy(dR_uptr.get(), hA_uptr.get(), m * n);
 	cutf::memory::copy(dA_uptr.get(), hA_uptr.get(), m * n);
 
 	auto d_start_m_list = cutf::memory::get_device_unique_ptr<std::size_t>(batch_size + 1);
@@ -55,7 +55,8 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 	mtk::tsqr_tc::qr256x128_batched<compute_mode>(
 			dW_uptr.get(), m * batch_size,
 			dY_uptr.get(), m * batch_size,
-			dR_uptr.get(), m * batch_size,
+			dR_uptr.get(), n * batch_size,
+			dA_uptr.get(), m * batch_size,
 			n,
 			batch_size,
 			d_start_m_list.get()
@@ -69,17 +70,17 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 	};
 	std::printf("%20s : %e [TFlop/s]\n", "performance", compute_complexity(m, n) * batch_size / elapsed_time / 1e12);
 
-	cutf::memory::copy(hA_uptr.get(), dR_uptr.get(), m * n * batch_size);
+	cutf::memory::copy(hR_uptr.get(), dR_uptr.get(), n * n * batch_size);
 	cutf::memory::copy(hW_uptr.get(), dW_uptr.get(), m * n * batch_size);
 	cutf::memory::copy(hY_uptr.get(), dY_uptr.get(), m * n * batch_size);
 
 #ifdef MTK_PRINT_MATRICES
-	cutf::debug::print::print_numpy_matrix(hA_uptr.get(), m, n, "R (output)");
-	cutf::debug::print::print_numpy_matrix(hW_uptr.get(), m, n, "W (output)");
-	cutf::debug::print::print_numpy_matrix(hY_uptr.get(), m, n, "Y (output)");
-
 	// Compute using cusolver
 	if (batch_size == 1) {
+		cutf::debug::print::print_numpy_matrix(hR_uptr.get(), n, n, "R (output)");
+		cutf::debug::print::print_numpy_matrix(hW_uptr.get(), m, n, "W (output)");
+		cutf::debug::print::print_numpy_matrix(hY_uptr.get(), m, n, "Y (output)");
+
 		auto cusolver_handle = cutf::cusolver::get_cusolver_dn_unique_ptr();
 		auto hR_cusolver_uptr = cutf::memory::get_host_unique_ptr<compute_t>(n * n);
 		auto hQ_cusolver_uptr = cutf::memory::get_host_unique_ptr<compute_t>(m * n);
@@ -102,7 +103,7 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 		auto cublas_handle = cutf::cublas::get_cublas_unique_ptr();
 
 		const auto residual = mtk::tsqr_tc::test_utils::compute_residual_in_dp(
-				dR_uptr.get(), m,
+				dR_uptr.get(), n,
 				dW_uptr.get(), m,
 				dY_uptr.get(), m,
 				dA_uptr.get(), m,
