@@ -8,78 +8,101 @@
 namespace {
 constexpr unsigned warp_size = 32;
 
-template <std::size_t DIM_N, std::size_t DIM_XP, class DST_T, class SRC_T>
-__device__ void copy_matrix_g2s_NxXP(
+template <unsigned block_size, unsigned DIM_N, int TRANSPOSE, class DST_T, class SRC_T>
+__device__ void copy_B_g2s(
 		DST_T* const dst_ptr,
 		const SRC_T* const src_ptr, const std::size_t ld_src,
-		const std::size_t m, const std::size_t n
+		const unsigned n
 		) {
-	constexpr unsigned matrix_block_m = 16;
-	constexpr unsigned num_lanes = warp_size / matrix_block_m;
-	const auto sm = cutf::thread::get_lane_id() % matrix_block_m;
-	const auto gm_offset = matrix_block_m * cutf::thread::get_warp_id();
-	const auto gm = gm_offset + sm;
-
-	const auto sn_lane = cutf::thread::get_lane_id() / matrix_block_m;
-	if (n == DIM_XP) {
-		if (gm_offset + matrix_block_m <= m) {
-			for (unsigned i = 0; i < DIM_XP; i += num_lanes) {
-				const auto gn = i + sn_lane;
-				const auto v = src_ptr[gn * ld_src + gm];
-				dst_ptr[gn * DIM_N + gm] = cutf::type::cast<DST_T>(v);
-			}
-		} else if (gm_offset >= m) {
-			for (unsigned i = 0; i < DIM_XP; i += num_lanes) {
-				const auto gn = i + sn_lane;
-				dst_ptr[gn * DIM_N + gm] = cutf::type::cast<DST_T>(0.0f);
+	constexpr auto num_warps = block_size / warp_size;
+	for (unsigned bm = 0; bm < DIM_N; bm += warp_size) {
+		const auto real_bm = min(warp_size, n - bm);
+		if (real_bm == warp_size) {
+			for (unsigned bn = 0; bn < n; bn += num_warps) {
+				const auto gn = bn + cutf::thread::get_warp_id();
+				auto v = cutf::type::cast<SRC_T>(0.0f);
+				if (gn < n) {
+					v = src_ptr[gn * ld_src + cutf::thread::get_lane_id() + bm];
+				}
+				if constexpr (TRANSPOSE == 0) {
+					dst_ptr[gn + (cutf::thread::get_lane_id() + bm) * DIM_N] = cutf::type::cast<DST_T>(v);
+				} else {
+					dst_ptr[gn * DIM_N + cutf::thread::get_lane_id() + bm] = cutf::type::cast<DST_T>(v);
+				}
 			}
 		} else {
-			for (unsigned i = 0; i < DIM_XP; i += num_lanes) {
-				const auto gn = i + sn_lane;
-				const auto v = cutf::type::cast<SRC_T>(0.0f);
-				if (gm < m) {
-					v = src_ptr[gn * ld_src + gm];
+			for (unsigned bn = 0; bn < DIM_N; bn += num_warps) {
+				const auto gn = bn + cutf::thread::get_warp_id();
+				auto v = cutf::type::cast<SRC_T>(0.0f);
+				if (gn < n && cutf::thread::get_lane_id() < real_bm) {
+					v = src_ptr[gn * ld_src + cutf::thread::get_lane_id() + bm];
 				}
-				dst_ptr[gn * DIM_N + gm] = cutf::type::cast<DST_T>(v);
+				if constexpr (TRANSPOSE == 0) {
+					dst_ptr[gn + (cutf::thread::get_lane_id() + bm) * DIM_N] = cutf::type::cast<DST_T>(v);
+				} else {
+					dst_ptr[gn * DIM_N + cutf::thread::get_lane_id() + bm] = cutf::type::cast<DST_T>(v);
+				}
 			}
 		}
-	} else {
-		unsigned i = 0;
-		if (gm_offset + matrix_block_m <= m) {
-			for (; i < n - (n & 0x1); i += num_lanes) {
-				const auto gn = i + sn_lane;
-				const auto v = src_ptr[gn * ld_src + gm];
-				dst_ptr[gn * DIM_N + gm] = cutf::type::cast<DST_T>(v);
-			}
-			if (n & 0x1) {
-				const auto gn = (i++) + sn_lane;
+	}
+}
+
+template <unsigned block_size, unsigned DIM_XP, unsigned DIM_N, class DST_T, class SRC_T>
+__device__ void copy_matrix_g2s_XPxN(
+		DST_T* const dst_ptr,
+		const SRC_T* const src_ptr, const std::size_t ld_src,
+		const unsigned m, const unsigned n
+		) {
+	constexpr auto num_warps = block_size / warp_size;
+	for (unsigned bm = 0; bm < m; bm += warp_size) {
+		const auto real_bm = min(warp_size, m - bm);
+		if (real_bm == warp_size) {
+			for (unsigned bn = 0; bn < n; bn += num_warps) {
+				const auto gn = bn + cutf::thread::get_warp_id();
 				auto v = cutf::type::cast<SRC_T>(0.0f);
-				if (sn_lane == 0) {
-					v = src_ptr[gn * ld_src + gm];
+				if (gn < n) {
+					v = src_ptr[gn * ld_src + cutf::thread::get_lane_id() + bm];
 				}
-				dst_ptr[gn * DIM_N + gm] = cutf::type::cast<DST_T>(v);
+				dst_ptr[gn * DIM_XP + cutf::thread::get_lane_id() + bm] = cutf::type::cast<DST_T>(v);
 			}
-		} else if (gm_offset <= m) {
-			for (; i < n - (n & 0x1); i += num_lanes) {
-				const auto gn = i + sn_lane;
-				const auto v = cutf::type::cast<SRC_T>(0.0f);
-				if (gm < m) {
-					v = src_ptr[gn * ld_src + gm];
-				}
-				dst_ptr[gn * DIM_N + gm] = cutf::type::cast<DST_T>(v);
-			}
-			if (n & 0x1) {
-				const auto gn = (i++) + sn_lane;
+		} else {
+			for (unsigned bn = 0; bn < n; bn += num_warps) {
+				const auto gn = bn + cutf::thread::get_warp_id();
 				auto v = cutf::type::cast<SRC_T>(0.0f);
-				if (sn_lane == 0 && gm < m) {
-					v = src_ptr[gn * ld_src + gm];
+				if (gn < n && cutf::thread::get_lane_id() < real_bm) {
+					v = src_ptr[gn * ld_src + cutf::thread::get_lane_id() + bm];
 				}
-				dst_ptr[gn * DIM_N + gm] = cutf::type::cast<DST_T>(v);
+				dst_ptr[gn * DIM_XP + cutf::thread::get_lane_id() + bm] = cutf::type::cast<DST_T>(v);
 			}
 		}
-		for (; i < DIM_XP; i += num_lanes) {
-			const auto gn = i + sn_lane;
-			dst_ptr[gn * DIM_N + gm] = cutf::type::cast<DST_T>(0.0f);
+	}
+}
+
+template <unsigned block_size, unsigned DIM_XP, unsigned DIM_N, class DST_T, class SRC_T>
+__device__ void copy_matrix_s2g_XPxN(
+		DST_T* const dst_ptr, const std::size_t ld_dst,
+		const SRC_T* const src_ptr,
+		const unsigned m, const unsigned n
+		) {
+	constexpr auto num_warps = block_size / warp_size;
+	for (unsigned bm = 0; bm < m; bm += warp_size) {
+		const auto real_bm = min(warp_size, m - bm);
+		if (real_bm == warp_size) {
+			for (unsigned bn = 0; bn < n; bn += num_warps) {
+				const auto gn = bn + cutf::thread::get_warp_id();
+				if (gn < n) {
+					const auto v = src_ptr[gn * DIM_XP + cutf::thread::get_lane_id() + bm];
+					dst_ptr[gn * ld_dst + cutf::thread::get_lane_id() + bm] = cutf::type::cast<DST_T>(v);
+				}
+			}
+		} else {
+			for (unsigned bn = 0; bn < n; bn += num_warps) {
+				const auto gn = bn + cutf::thread::get_warp_id();
+				if (gn < n && cutf::thread::get_lane_id() < real_bm) {
+					const auto v = src_ptr[gn * DIM_XP + cutf::thread::get_lane_id() + bm];
+					dst_ptr[gn * ld_dst + cutf::thread::get_lane_id() + bm] = cutf::type::cast<DST_T>(v);
+				}
+			}
 		}
 	}
 }
@@ -92,6 +115,7 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 		const float* const gmem_C_ptr, const std::size_t ld_C,
 		const std::size_t m, const std::size_t n
 		) {
+	constexpr unsigned block_size = 256;
 	constexpr std::size_t DIM_N = 128;
 	constexpr std::size_t DIM_BLOCK_M = 64;
 	constexpr std::size_t K_BLOCKING = 64;
@@ -104,26 +128,33 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 	float* const smem_B_ptr = smem;
 	float* const smem_A_ptr = smem_B_ptr + DIM_N * DIM_N;
 
-	// Load Q
-	copy_matrix_g2s_NxXP<DIM_N, DIM_N>(
+	// Load B
+	copy_B_g2s<block_size, DIM_N, B_TRANS>(
 			smem_B_ptr,
 			gmem_B_ptr, ld_B,
 			n, n
 			);
 	for (std::size_t bm = 0; bm < m; bm += DIM_BLOCK_M) {
-		// Load Y
-		// TODO
-		if constexpr (B_TRANS) {
-
-		} else {
-
-		}
 		nvcuda::wmma::fragment<nvcuda::wmma::accumulator, DIM_TC, DIM_TC, DIM_TC, float> frag_C[DIM_BLOCK_M / DIM_TC], frag_d_C[DIM_BLOCK_M / DIM_TC];
 		if constexpr (C_EXIST) {
-			// TODO : C is n x n matrix.
-			for (auto sn = decltype(DIM_BLOCK_M)(0); sn < DIM_BLOCK_M; sn += DIM_TC) {
-				mtk::wmma::fill_zero(frag_C[sn]);
-				mtk::wmma::fill_zero(frag_d_C[sn]);
+			if (bm < n) {
+				const auto real_m = min(DIM_BLOCK_M, n - bm);
+				copy_matrix_g2s_XPxN<block_size, DIM_BLOCK_M, DIM_N>(
+						smem_A_ptr,
+						gmem_C_ptr + bm, ld_C,
+						real_m, n
+						);
+				__syncthreads();
+				for (auto sn = decltype(DIM_BLOCK_M)(0); sn < DIM_BLOCK_M; sn += DIM_TC) {
+					auto load_ptr = smem_A_ptr + DIM_BLOCK_M * DIM_TC * cutf::thread::get_warp_id() + sn;
+					nvcuda::wmma::load_matrix_sync(frag_C[sn], load_ptr, DIM_BLOCK_M, nvcuda::wmma::mem_col_major);
+					mtk::wmma::fill_zero(frag_d_C[sn]);
+				}
+			} else {
+				for (auto sn = decltype(DIM_BLOCK_M)(0); sn < DIM_BLOCK_M; sn += DIM_TC) {
+					mtk::wmma::fill_zero(frag_C[sn]);
+					mtk::wmma::fill_zero(frag_d_C[sn]);
+				}
 			}
 		} else {
 			for (auto sn = decltype(DIM_BLOCK_M)(0); sn < DIM_BLOCK_M; sn += DIM_TC) {
@@ -131,6 +162,12 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 				mtk::wmma::fill_zero(frag_d_C[sn]);
 			}
 		}
+		const auto real_m = min(DIM_BLOCK_M, n - bm);
+		copy_matrix_g2s_XPxN<block_size, DIM_BLOCK_M, DIM_N>(
+				smem_A_ptr,
+				gmem_C_ptr + bm, ld_C,
+				real_m, n
+				);
 		__syncthreads();
 		for (auto bk = decltype(DIM_N)(0); bk < DIM_N; bk += K_BLOCKING) {
 			nvcuda::wmma::fragment<nvcuda::wmma::matrix_b, DIM_TC, DIM_TC, DIM_TC, half, nvcuda::wmma::col_major> frag_B[NUM_BLOCKINGS], frag_d_B[NUM_BLOCKINGS];
@@ -192,17 +229,20 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 			nvcuda::wmma::store_matrix_sync(store_ptr, frag_C[c_index], DIM_BLOCK_M, nvcuda::wmma::mem_col_major);
 		}
 		__syncthreads();
-
-		// TODO: Sore to gmem
+		copy_matrix_s2g_XPxN<block_size, DIM_BLOCK_M, DIM_N>(
+				gmem_D_ptr + bm, ld_D,
+				smem_A_ptr,
+				real_m, n
+				);
 	}
 }
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode, int A_MINUS, int B_TRANS, int C_EXIST>
 __device__ void gemm_MxNxN_core(
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>* const gmem_D_ptr, const std::size_t ld_D,
-		const typename mtk::tsqr_tc::detail::get_type<compute_mode>* const gmem_A_ptr, const std::size_t ld_A,
-		const typename mtk::tsqr_tc::detail::get_type<compute_mode>* const gmem_B_ptr, const std::size_t ld_B,
-		const typename mtk::tsqr_tc::detail::get_type<compute_mode>* const gmem_C_ptr, const std::size_t ld_C,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_D_ptr, const std::size_t ld_D,
+		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_A_ptr, const std::size_t ld_A,
+		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_B_ptr, const std::size_t ld_B,
+		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_C_ptr, const std::size_t ld_C,
 		const std::size_t m, const std::size_t n
 		) {
 	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_hmma_cor) {
@@ -218,11 +258,11 @@ __device__ void gemm_MxNxN_core(
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
 __global__ void tsqr_backward_kernel(
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>* const gmem_OUT_Q_ptr  , const std::size_t ld_OUT_Q,
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>* const gmem_W_ptr      , const std::size_t ld_W,
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>* const gmem_Y_ptr      , const std::size_t ld_Y,
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>* const gmem_IN_Q_ptr   , const std::size_t ld_IN_Q,
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>* const gmem_WORKING_ptr,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_OUT_Q_ptr  , const std::size_t ld_OUT_Q,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_W_ptr      , const std::size_t ld_W,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_Y_ptr      , const std::size_t ld_Y,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_IN_Q_ptr   , const std::size_t ld_IN_Q,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_WORKING_ptr,
 		const std::size_t n,
 		const std::size_t* const m_start_list
 		) {
@@ -256,11 +296,11 @@ __global__ void tsqr_backward_kernel(
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
 void tsqr_backward(
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>* const gmem_OUT_Q_ptr  , const std::size_t ld_OUT_Q,
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>* const gmem_W_ptr      , const std::size_t ld_W,
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>* const gmem_Y_ptr      , const std::size_t ld_Y,
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>* const gmem_IN_Q_ptr   , const std::size_t ld_IN_Q,
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>* const gmem_WORKING_ptr,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_OUT_Q_ptr  , const std::size_t ld_OUT_Q,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_W_ptr      , const std::size_t ld_W,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_Y_ptr      , const std::size_t ld_Y,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_IN_Q_ptr   , const std::size_t ld_IN_Q,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_WORKING_ptr,
 		const std::size_t n,
 		const std::size_t split_size,
 		const std::size_t* const m_start_list,
@@ -281,7 +321,7 @@ void tsqr_backward(
 template <class T>
 __global__ void make_identity_matrix_kernel(
 		T* const ptr,
-		std::size_t m, std::size_t n
+		unsigned m, unsigned n
 		) {
 	const auto tid = blockIdx.x * blockDim.x + threadIdx.x;
 	if (m * n <= tid) {
@@ -298,7 +338,7 @@ __global__ void make_identity_matrix_kernel(
 template <class T>
 void make_indentity_matrix(
 		T* const ptr,
-		const std::size_t m, const std::size_t n,
+		const unsigned m, const unsigned n,
 		const cudaStream_t cuda_stream
 		) {
 	const auto block_size = 256;
