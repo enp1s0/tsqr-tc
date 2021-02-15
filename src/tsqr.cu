@@ -5,6 +5,28 @@
 #include <cutf/type.hpp>
 #include <wmma_extension.hpp>
 
+#define MTK_DEBUG
+#ifdef MTK_DEBUG
+#include <cutf/debug/matrix.hpp>
+#define MTK_DEBUG_PRINT_MATRIX(ptr, m, n, ldm, name) \
+	__syncthreads(); \
+	if (threadIdx.x == 0) cutf::debug::print::print_numpy_matrix(ptr, m, n, ldm, name); \
+	__syncthreads();
+#define MTK_DEBUG_CALL_FUNC(func) \
+	__syncthreads(); \
+	if (threadIdx.x == 0) func; \
+	__syncthreads();
+#define MTK_DEBUG_CALL_HOST_FUNC(func) \
+	func;std::fflush(stdout);
+#define MTK_DEBUG_CHECK_KERNEL_ERROR \
+	CUTF_CHECK_ERROR(cudaDeviceSynchronize())
+#else
+#define MTK_DEBUG_PRINT_MATRIX(ptr, m, n, ldm, name)
+#define MTK_DEBUG_CALL_FUNC(func)
+#define MTK_DEBUG_CALL_HOST_FUNC(func)
+#define MTK_DEBUG_CHECK_KERNEL_ERROR
+#endif
+
 namespace {
 constexpr unsigned warp_size = 32;
 
