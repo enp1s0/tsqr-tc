@@ -490,7 +490,7 @@ void mtk::tsqr_tc::tsqr(
 	// Backward computation
 	make_indentity_matrix(
 			buffer.get_r_buffer_ptr(),
-			2 * n, n,
+			n, n,
 			cuda_stream
 			);
 	MTK_DEBUG_CHECK_KERNEL_ERROR;
@@ -500,7 +500,7 @@ void mtk::tsqr_tc::tsqr(
 			buffer.get_w_buffer_ptr() + wy_ptr_offset, 2 * n,
 			buffer.get_y_buffer_ptr() + wy_ptr_offset, 2 * n,
 			buffer.get_r_buffer_ptr(), n,
-			buffer.get_r_buffer_ptr(),
+			buffer.get_r_buffer_ptr() + n * n,
 			n, 1,
 			buffer.get_index_buffer_ptr(),
 			cuda_stream
@@ -514,13 +514,14 @@ void mtk::tsqr_tc::tsqr(
 				buffer.get_w_buffer_ptr() + wy_ptr_offset, 2 * n * s,
 				buffer.get_w_buffer_ptr() + wy_ptr_offset, 2 * n * s,
 				buffer.get_y_buffer_ptr() + wy_ptr_offset, 2 * n * s,
-				buffer.get_w_buffer_ptr() + prev_wy_ptr_offset, 2 * n * s / 2,
+				buffer.get_w_buffer_ptr() + prev_wy_ptr_offset, (2 * n * s) / 2,
 				buffer.get_r_buffer_ptr(),
 				n, s,
 				buffer.get_index_buffer_ptr(),
 				cuda_stream
 				);
 		MTK_DEBUG_CHECK_KERNEL_ERROR;
+		MTK_DEBUG_PRINT_DEVICE_MATRIX(buffer.get_w_buffer_ptr() + wy_ptr_offset, 2 * n * s, n, 2 * n * s, ("Middle Q(s=" + std::to_string(s) + ")").c_str());
 	}
 	for (std::size_t i = 0; i < buffer.get_split_count() + 1; i++) {
 		buffer.get_index_buffer_host_ptr()[i] = i * m / buffer.get_split_count();
@@ -534,7 +535,7 @@ void mtk::tsqr_tc::tsqr(
 			q_ptr, ld_Q,
 			buffer.get_w_buffer_ptr() + wy_ptr_offset, m,
 			buffer.get_y_buffer_ptr() + wy_ptr_offset, m,
-			buffer.get_w_buffer_ptr() + prev_wy_ptr_offset, 2 * n * s / 2,
+			buffer.get_w_buffer_ptr() + prev_wy_ptr_offset, (2 * n * s) / 2,
 			buffer.get_r_buffer_ptr(),
 			n, s,
 			buffer.get_index_buffer_ptr(),
