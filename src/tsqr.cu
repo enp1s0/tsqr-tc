@@ -463,3 +463,15 @@ void mtk::tsqr_tc::tsqr(
 			cuda_stream
 			);
 }
+
+#define MTK_INSTANCE_TSQR(compute_mode) \
+template void mtk::tsqr_tc::tsqr(\
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
+		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const, const std::size_t, \
+		const std::size_t, const std::size_t, \
+		mtk::tsqr_tc::tsqr_buffer<compute_mode>&, \
+		const cudaStream_t\
+		)
+
+MTK_INSTANCE_TSQR(mtk::tsqr_tc::compute_mode::fp32_hmma_cor);
