@@ -6,7 +6,7 @@ namespace tsqr_tc {
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
 class tsqr_buffer {
 public:
-	using buffer_type = typename mtk::tsqr_tc::detail::get_type<compute_mode>;
+	using buffer_type = typename mtk::tsqr_tc::detail::get_type<compute_mode>::type;
 	static const std::size_t BQR_MAX_M = 256lu;
 private:
 	std::size_t m, n;
@@ -39,9 +39,9 @@ public:
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
 void tsqr(
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>* r_ptr, const std::size_t ld_R,
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>* q_ptr, const std::size_t ld_Q,
-		const typename mtk::tsqr_tc::detail::get_type<compute_mode>* a_ptr, const std::size_t ld_A,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const r_ptr, const std::size_t ld_R,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const q_ptr, const std::size_t ld_Q,
+		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const a_ptr, const std::size_t ld_A,
 		const std::size_t m, const std::size_t n,
 		mtk::tsqr_tc::tsqr_buffer<compute_mode>& buffer,
 		const cudaStream_t cuda_stream
