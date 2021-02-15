@@ -386,10 +386,13 @@ void mtk::tsqr_tc::tsqr(
 		const cudaStream_t cuda_stream
 		) {
 	assert(n <= 128);
-
+	MTK_DEBUG_CALL_HOST_FUNC(std::printf("=======DEBUG START========\n= %s\n==========================\n", __func__));
+	MTK_DEBUG_CALL_HOST_FUNC(std::printf("=======PREPERATION==\n"));
 	for (std::size_t i = 0; i < buffer.get_split_count() + 1; i++) {
 		buffer.get_index_buffer_host_ptr()[i] = i * m / buffer.get_split_count();
 	}
+
+	MTK_DEBUG_CALL_HOST_FUNC([&](){std::printf("m_list = [");for (std::size_t i = 0; i < buffer.get_split_count() + 1; i++) {std::printf("%lu ", buffer.get_index_buffer_host_ptr()[i]);}std::printf("]\n");}());
 	cutf::memory::copy_async(buffer.get_index_buffer_ptr(), buffer.get_index_buffer_host_ptr(), buffer.get_index_buffer_count(), cuda_stream);
 
 	unsigned r_ptr_index = 0;
@@ -400,6 +403,8 @@ void mtk::tsqr_tc::tsqr(
 	std::size_t wy_ptr_offset = 0;
 
 	// Forwad computation
+	MTK_DEBUG_CALL_HOST_FUNC(std::printf("=======FORWARD======\n"));
+	MTK_DEBUG_CALL_HOST_FUNC(std::printf("BQR (first) [wy_offset = %10lu, r_ptr_flipflop = %u]\n", wy_ptr_offset, r_ptr_index));
 	mtk::tsqr_tc::qr256x128_batched<compute_mode>(
 			buffer.get_w_buffer_ptr() + wy_ptr_offset, m,
 			buffer.get_y_buffer_ptr() + wy_ptr_offset, m,
@@ -413,9 +418,13 @@ void mtk::tsqr_tc::tsqr(
 	wy_ptr_offset += m * n;
 	r_ptr_index = 1 - r_ptr_index;
 
+	for (std::size_t i = 0; i < buffer.get_split_count() + 1; i++) {
+		buffer.get_index_buffer_host_ptr()[i] = i * (2 * n);
+	}
 	cutf::memory::copy_async(buffer.get_index_buffer_ptr(), buffer.get_index_buffer_host_ptr(), buffer.get_index_buffer_count(), cuda_stream);
 
 	for (std::size_t s = buffer.get_split_count(); s > 1; s >>= 1) {
+		MTK_DEBUG_CALL_HOST_FUNC(std::printf("BQR (s=%3lu) [wy_offset = %10lu, r_ptr_flipflop = %u]\n", s, wy_ptr_offset, r_ptr_index));
 		mtk::tsqr_tc::qr256x128_batched<compute_mode>(
 				buffer.get_w_buffer_ptr() + wy_ptr_offset, 2 * n * s,
 				buffer.get_y_buffer_ptr() + wy_ptr_offset, 2 * n * s,
@@ -429,6 +438,8 @@ void mtk::tsqr_tc::tsqr(
 		wy_ptr_offset += 2 * n * n * s;
 		r_ptr_index = 1 - r_ptr_index;
 	}
+
+	MTK_DEBUG_CALL_HOST_FUNC(std::printf("BQR (last ) [wy_offset = %10lu, r_ptr_flipflop = %u]\n", wy_ptr_offset, r_ptr_index));
 	mtk::tsqr_tc::qr256x128<compute_mode>(
 			buffer.get_w_buffer_ptr() + wy_ptr_offset, 2 * n,
 			buffer.get_y_buffer_ptr() + wy_ptr_offset, 2 * n,
@@ -437,12 +448,16 @@ void mtk::tsqr_tc::tsqr(
 			2 * n, n,
 			cuda_stream
 			);
+
+	MTK_DEBUG_CALL_HOST_FUNC(std::printf("=======BACKWARD=====\n"));
 	// Backward computation
 	make_indentity_matrix(
 			buffer.get_r_buffer_ptr(),
 			2 * n, n,
 			cuda_stream
 			);
+	MTK_DEBUG_CHECK_KERNEL_ERROR;
+	MTK_DEBUG_CALL_HOST_FUNC(std::printf("BGEMM (last ) [wy_offset = %10lu]\n", wy_ptr_offset));
 	tsqr_backward<compute_mode>(
 			buffer.get_w_buffer_ptr() + wy_ptr_offset, 2 * n,
 			buffer.get_w_buffer_ptr() + wy_ptr_offset, 2 * n,
@@ -453,9 +468,11 @@ void mtk::tsqr_tc::tsqr(
 			buffer.get_index_buffer_ptr(),
 			cuda_stream
 			);
+	MTK_DEBUG_CHECK_KERNEL_ERROR;
 	for (std::size_t s = 2; s < buffer.get_split_count(); s <<= 1) {
 		const auto prev_wy_ptr_offset = wy_ptr_offset;
 		wy_ptr_offset -= 2 * n * n * s;
+		MTK_DEBUG_CALL_HOST_FUNC(std::printf("BGEMM (s= %3lu) [wy_offset = %10lu]\n", s, wy_ptr_offset));
 		tsqr_backward<compute_mode>(
 				buffer.get_w_buffer_ptr() + wy_ptr_offset, 2 * n * s,
 				buffer.get_w_buffer_ptr() + wy_ptr_offset, 2 * n * s,
@@ -466,6 +483,7 @@ void mtk::tsqr_tc::tsqr(
 				buffer.get_index_buffer_ptr(),
 				cuda_stream
 				);
+		MTK_DEBUG_CHECK_KERNEL_ERROR;
 	}
 	for (std::size_t i = 0; i < buffer.get_split_count() + 1; i++) {
 		buffer.get_index_buffer_host_ptr()[i] = i * m / buffer.get_split_count();
@@ -474,6 +492,7 @@ void mtk::tsqr_tc::tsqr(
 	const auto prev_wy_ptr_offset = wy_ptr_offset;
 	wy_ptr_offset -= m * n;
 	const auto s = buffer.get_split_count();
+	MTK_DEBUG_CALL_HOST_FUNC(std::printf("BGEMM (first) [wy_offset = %10lu]\n", wy_ptr_offset));
 	tsqr_backward<compute_mode>(
 			q_ptr, ld_Q,
 			buffer.get_w_buffer_ptr() + wy_ptr_offset, m,
@@ -484,6 +503,8 @@ void mtk::tsqr_tc::tsqr(
 			buffer.get_index_buffer_ptr(),
 			cuda_stream
 			);
+	MTK_DEBUG_CHECK_KERNEL_ERROR;
+	MTK_DEBUG_CALL_HOST_FUNC(std::printf("=======DEBUG END  ========\n= %s\n==========================\n", __func__));
 }
 
 #define MTK_INSTANCE_TSQR(compute_mode) \
