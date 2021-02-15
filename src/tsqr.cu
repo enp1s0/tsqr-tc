@@ -363,18 +363,17 @@ void mtk::tsqr_tc::tsqr(
 	assert(n <= 128);
 
 	for (std::size_t i = 0; i < buffer.get_split_count() + 1; i++) {
-		buffer.get_index_buffer_count()[i] = i * m / buffer.get_split_count();
+		buffer.get_index_buffer_ptr()[i] = i * m / buffer.get_split_count();
 	}
 	cutf::memory::copy_async(buffer.get_index_buffer_ptr(), buffer.get_index_buffer_host_ptr(), buffer.get_index_buffer_count(), cuda_stream);
 	for (std::size_t i = 0; i < buffer.get_split_count(); i++) {
-		buffer.get_index_buffer_count()[i] = i * (2 * n);
+		buffer.get_index_buffer_ptr()[i] = i * (2 * n);
 	}
 
 	unsigned r_ptr_index = 0;
-	typename mtk::tsqr_tc::tsqr_buffer<compute_mode>::buffer_type r_buffer_list[2] = {
-		buffer.get_r_buffer_ptr(),
-		buffer.get_r_buffer_ptr() + buffer.get_split_count() * n * n
-	};
+	typename mtk::tsqr_tc::tsqr_buffer<compute_mode>::buffer_type* r_buffer_list[2];
+	r_buffer_list[0] = buffer.get_r_buffer_ptr();
+	r_buffer_list[1] = buffer.get_r_buffer_ptr() + buffer.get_split_count() * n * n;
 
 	std::size_t wy_ptr_offset = 0;
 
@@ -412,13 +411,15 @@ void mtk::tsqr_tc::tsqr(
 			buffer.get_w_buffer_ptr() + wy_ptr_offset, 2 * n,
 			buffer.get_y_buffer_ptr() + wy_ptr_offset, 2 * n,
 			r_ptr, ld_R,
+			r_buffer_list[1 - r_ptr_index], 2 * n,
 			2 * n, n,
 			cuda_stream
 			);
 	// Backward computation
 	make_indentity_matrix(
 			buffer.get_r_buffer_ptr(),
-			2 * n, n
+			2 * n, n,
+			cuda_stream
 			);
 	tsqr_backward<compute_mode>(
 			buffer.get_w_buffer_ptr() + wy_ptr_offset, 2 * n,
@@ -445,7 +446,7 @@ void mtk::tsqr_tc::tsqr(
 				);
 	}
 	for (std::size_t i = 0; i < buffer.get_split_count() + 1; i++) {
-		buffer.get_index_buffer_count()[i] = i * m / buffer.get_split_count();
+		buffer.get_index_buffer_ptr()[i] = i * m / buffer.get_split_count();
 	}
 	cutf::memory::copy_async(buffer.get_index_buffer_ptr(), buffer.get_index_buffer_host_ptr(), buffer.get_index_buffer_count(), cuda_stream);
 	const auto prev_wy_ptr_offset = wy_ptr_offset;
