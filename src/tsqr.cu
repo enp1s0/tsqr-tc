@@ -49,7 +49,7 @@ __device__ void copy_B_g2s(
 	for (unsigned bm = 0; bm < DIM_N; bm += warp_size) {
 		const auto real_bm = min(warp_size, n - bm);
 		if (real_bm == warp_size) {
-			for (unsigned bn = 0; bn < n; bn += num_warps) {
+			for (unsigned bn = 0; bn < DIM_N; bn += num_warps) {
 				const auto gn = bn + cutf::thread::get_warp_id();
 				auto v = cutf::type::cast<SRC_T>(0.0f);
 				if (gn < n) {
@@ -78,32 +78,58 @@ __device__ void copy_B_g2s(
 	}
 }
 
-template <unsigned block_size, unsigned DIM_XP, unsigned DIM_N, class DST_T, class SRC_T>
+template <unsigned block_size, unsigned DIM_XP, unsigned DIM_N, unsigned trans, class DST_T, class SRC_T>
 __device__ void copy_matrix_g2s_XPxN(
 		DST_T* const dst_ptr,
 		const SRC_T* const src_ptr, const std::size_t ld_src,
 		const unsigned m, const unsigned n
 		) {
 	constexpr auto num_warps = block_size / warp_size;
-	for (unsigned bm = 0; bm < m; bm += warp_size) {
-		const auto real_bm = min(warp_size, m - bm);
-		if (real_bm == warp_size) {
-			for (unsigned bn = 0; bn < n; bn += num_warps) {
-				const auto gn = bn + cutf::thread::get_warp_id();
-				auto v = cutf::type::cast<SRC_T>(0.0f);
-				if (gn < n) {
-					v = src_ptr[gn * ld_src + cutf::thread::get_lane_id() + bm];
+
+	if constexpr (trans == 0) {
+		for (unsigned bm = 0; bm < DIM_XP; bm += warp_size) {
+			const auto real_bm = min(warp_size, m - bm);
+			if (real_bm == warp_size) {
+				for (unsigned bn = 0; bn < DIM_N; bn += num_warps) {
+					const auto gn = bn + cutf::thread::get_warp_id();
+					auto v = cutf::type::cast<SRC_T>(0.0f);
+					if (gn < n) {
+						v = src_ptr[gn * ld_src + cutf::thread::get_lane_id() + bm];
+					}
+					dst_ptr[gn * DIM_XP + cutf::thread::get_lane_id() + bm] = cutf::type::cast<DST_T>(v);
 				}
-				dst_ptr[gn * DIM_XP + cutf::thread::get_lane_id() + bm] = cutf::type::cast<DST_T>(v);
+			} else {
+				for (unsigned bn = 0; bn < DIM_N; bn += num_warps) {
+					const auto gn = bn + cutf::thread::get_warp_id();
+					auto v = cutf::type::cast<SRC_T>(0.0f);
+					if (gn < n && cutf::thread::get_lane_id() < real_bm) {
+						v = src_ptr[gn * ld_src + cutf::thread::get_lane_id() + bm];
+					}
+					dst_ptr[gn * DIM_XP + cutf::thread::get_lane_id() + bm] = cutf::type::cast<DST_T>(v);
+				}
 			}
-		} else {
-			for (unsigned bn = 0; bn < n; bn += num_warps) {
-				const auto gn = bn + cutf::thread::get_warp_id();
-				auto v = cutf::type::cast<SRC_T>(0.0f);
-				if (gn < n && cutf::thread::get_lane_id() < real_bm) {
-					v = src_ptr[gn * ld_src + cutf::thread::get_lane_id() + bm];
+		}
+	} else {
+		for (unsigned bm = 0; bm < DIM_XP; bm += warp_size) {
+			const auto real_bm = min(warp_size, m - bm);
+			if (real_bm == warp_size) {
+				for (unsigned bn = 0; bn < DIM_N; bn += num_warps) {
+					const auto gn = bn + cutf::thread::get_warp_id();
+					auto v = cutf::type::cast<SRC_T>(0.0f);
+					if (gn < n) {
+						v = src_ptr[gn + (cutf::thread::get_lane_id() + bm) * ld_src];
+					}
+					dst_ptr[gn * DIM_XP + cutf::thread::get_lane_id() + bm] = cutf::type::cast<DST_T>(v);
 				}
-				dst_ptr[gn * DIM_XP + cutf::thread::get_lane_id() + bm] = cutf::type::cast<DST_T>(v);
+			} else {
+				for (unsigned bn = 0; bn < DIM_N; bn += num_warps) {
+					const auto gn = bn + cutf::thread::get_warp_id();
+					auto v = cutf::type::cast<SRC_T>(0.0f);
+					if (gn < n && cutf::thread::get_lane_id() < real_bm) {
+						v = src_ptr[gn + (cutf::thread::get_lane_id() + bm) * ld_src];
+					}
+					dst_ptr[gn * DIM_XP + cutf::thread::get_lane_id() + bm] = cutf::type::cast<DST_T>(v);
+				}
 			}
 		}
 	}
@@ -119,7 +145,7 @@ __device__ void copy_matrix_s2g_XPxN(
 	for (unsigned bm = 0; bm < m; bm += warp_size) {
 		const auto real_bm = min(warp_size, m - bm);
 		if (real_bm == warp_size) {
-			for (unsigned bn = 0; bn < n; bn += num_warps) {
+			for (unsigned bn = 0; bn < DIM_N; bn += num_warps) {
 				const auto gn = bn + cutf::thread::get_warp_id();
 				if (gn < n) {
 					const auto v = src_ptr[gn * DIM_XP + cutf::thread::get_lane_id() + bm];
@@ -127,7 +153,7 @@ __device__ void copy_matrix_s2g_XPxN(
 				}
 			}
 		} else {
-			for (unsigned bn = 0; bn < n; bn += num_warps) {
+			for (unsigned bn = 0; bn < DIM_N; bn += num_warps) {
 				const auto gn = bn + cutf::thread::get_warp_id();
 				if (gn < n && cutf::thread::get_lane_id() < real_bm) {
 					const auto v = src_ptr[gn * DIM_XP + cutf::thread::get_lane_id() + bm];
@@ -138,7 +164,7 @@ __device__ void copy_matrix_s2g_XPxN(
 	}
 }
 
-template <int A_MINUS, int B_TRANS, int C_EXIST>
+template <int A_MINUS, int A_TRANS, int C_EXIST>
 __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 		float* const gmem_D_ptr, const std::size_t ld_D,
 		const float* const gmem_A_ptr, const std::size_t ld_A,
@@ -160,46 +186,49 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 	float* const smem_A_ptr = smem_B_ptr + DIM_N * DIM_N;
 
 	// Load B
-	copy_B_g2s<block_size, DIM_N, B_TRANS>(
+	copy_B_g2s<block_size, DIM_N, 0>(
 			smem_B_ptr,
 			gmem_B_ptr, ld_B,
 			n
 			);
+	MTK_DEBUG_PRINT_MATRIX(smem_B_ptr, n, n, DIM_N, "B");
 	for (std::size_t bm = 0; bm < m; bm += DIM_BLOCK_M) {
 		nvcuda::wmma::fragment<nvcuda::wmma::accumulator, DIM_TC, DIM_TC, DIM_TC, float> frag_C[DIM_BLOCK_M / DIM_TC], frag_d_C[DIM_BLOCK_M / DIM_TC];
 		if constexpr (C_EXIST) {
 			// We use n x n size of matrix C in TSQR even if the size of D is 2n x n.
 			if (bm < n) {
 				const auto real_m = min(DIM_BLOCK_M, n - bm);
-				copy_matrix_g2s_XPxN<block_size, DIM_BLOCK_M, DIM_N>(
+				copy_matrix_g2s_XPxN<block_size, DIM_BLOCK_M, DIM_N, 0>(
 						smem_A_ptr,
 						gmem_C_ptr + bm, ld_C,
 						real_m, n
 						);
+				MTK_DEBUG_PRINT_MATRIX(smem_A_ptr, real_m, n, DIM_BLOCK_M, "C");
 				__syncthreads();
 				for (auto sn = decltype(DIM_BLOCK_M)(0); sn < DIM_BLOCK_M; sn += DIM_TC) {
 					auto load_ptr = smem_A_ptr + DIM_BLOCK_M * DIM_TC * cutf::thread::get_warp_id() + sn;
-					nvcuda::wmma::load_matrix_sync(frag_C[sn], load_ptr, DIM_BLOCK_M, nvcuda::wmma::mem_col_major);
-					mtk::wmma::fill_zero(frag_d_C[sn]);
+					nvcuda::wmma::load_matrix_sync(frag_C[sn / DIM_TC], load_ptr, DIM_BLOCK_M, nvcuda::wmma::mem_col_major);
+					mtk::wmma::fill_zero(frag_d_C[sn / DIM_TC]);
 				}
 			} else {
-				for (auto sn = decltype(DIM_BLOCK_M)(0); sn < DIM_BLOCK_M; sn += DIM_TC) {
+				for (auto sn = decltype(DIM_BLOCK_M)(0); sn < DIM_BLOCK_M / DIM_TC; sn++) {
 					mtk::wmma::fill_zero(frag_C[sn]);
 					mtk::wmma::fill_zero(frag_d_C[sn]);
 				}
 			}
 		} else {
-			for (auto sn = decltype(DIM_BLOCK_M)(0); sn < DIM_BLOCK_M; sn += DIM_TC) {
+			for (auto sn = decltype(DIM_BLOCK_M)(0); sn < DIM_BLOCK_M / DIM_TC; sn++) {
 				mtk::wmma::fill_zero(frag_C[sn]);
 				mtk::wmma::fill_zero(frag_d_C[sn]);
 			}
 		}
-		const auto real_m = min(DIM_BLOCK_M, n - bm);
-		copy_matrix_g2s_XPxN<block_size, DIM_BLOCK_M, DIM_N>(
+		const auto real_m = min(DIM_BLOCK_M, m - bm);
+		copy_matrix_g2s_XPxN<block_size, DIM_BLOCK_M, DIM_N, A_TRANS>(
 				smem_A_ptr,
 				gmem_A_ptr + bm, ld_A,
 				real_m, n
 				);
+		MTK_DEBUG_PRINT_MATRIX(smem_A_ptr, real_m, n, DIM_BLOCK_M, "A block");
 		__syncthreads();
 		for (auto bk = decltype(DIM_N)(0); bk < DIM_N; bk += K_BLOCKING) {
 			nvcuda::wmma::fragment<nvcuda::wmma::matrix_b, DIM_TC, DIM_TC, DIM_TC, half, nvcuda::wmma::col_major> frag_B[NUM_BLOCKINGS], frag_d_B[NUM_BLOCKINGS];
@@ -225,14 +254,14 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 				});
 			for (auto sn = decltype(DIM_BLOCK_M)(0); sn < DIM_BLOCK_M; sn += DIM_TC) {
 				nvcuda::wmma::fragment<nvcuda::wmma::matrix_a, DIM_TC, DIM_TC, DIM_TC, half, nvcuda::wmma::col_major> frag_A[NUM_BLOCKINGS], frag_d_A[NUM_BLOCKINGS];
-				const auto a_offset = bk * DIM_BLOCK_M;
+				const auto a_offset = bk * DIM_BLOCK_M + sn;
 				mtk::wmma::foreach<decltype(frag_A[0])>(
 					[&](const unsigned* frag_index_list, const unsigned fragment_index_count, const unsigned mem_index) {
 						const auto mem_m = mem_index % DIM_TC;
 						const auto mem_n = mem_index / DIM_TC;
 						const auto m_offset = a_offset + mem_n * DIM_BLOCK_M + mem_m;
 						for (unsigned k = 0; k < NUM_BLOCKINGS; k++) {
-							const auto v = smem_A_ptr[m_offset + k * DIM_TC];
+							const auto v = smem_A_ptr[m_offset + k * DIM_TC * DIM_BLOCK_M];
 							const auto hv = cutf::type::cast<half>(v);
 							const auto dhv = cutf::type::cast<half>((v - cutf::type::cast<float>(hv)) * cor_scale);
 							for (unsigned i = 0; i < fragment_index_count; i++) {
@@ -266,10 +295,12 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 				smem_A_ptr,
 				real_m, n
 				);
+		MTK_DEBUG_PRINT_MATRIX(smem_A_ptr, real_m, n, DIM_BLOCK_M, "D block");
 	}
+	MTK_DEBUG_CALL_FUNC(printf("# -<< %s<%d, %d, %d>\n", __func__, A_MINUS, A_TRANS, C_EXIST));
 }
 
-template <mtk::tsqr_tc::compute_mode::type compute_mode, int A_MINUS, int B_TRANS, int C_EXIST>
+template <mtk::tsqr_tc::compute_mode::type compute_mode, int A_MINUS, int A_TRANS, int C_EXIST>
 __device__ void gemm_MxNxN_core(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_D_ptr, const std::size_t ld_D,
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_A_ptr, const std::size_t ld_A,
@@ -278,7 +309,7 @@ __device__ void gemm_MxNxN_core(
 		const std::size_t m, const std::size_t n
 		) {
 	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_hmma_cor) {
-		gemm_MxNxN_core_fp32_hmma_cor<A_MINUS, B_TRANS, C_EXIST>(
+		gemm_MxNxN_core_fp32_hmma_cor<A_MINUS, A_TRANS, C_EXIST>(
 				gmem_D_ptr, ld_D,
 				gmem_A_ptr, ld_A,
 				gmem_B_ptr, ld_B,
