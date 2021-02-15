@@ -8,10 +8,18 @@
 #define MTK_DEBUG
 #ifdef MTK_DEBUG
 #include <cutf/debug/matrix.hpp>
+#include <type_traits>
 #define MTK_DEBUG_PRINT_MATRIX(ptr, m, n, ldm, name) \
 	__syncthreads(); \
 	if (threadIdx.x == 0) cutf::debug::print::print_numpy_matrix(ptr, m, n, ldm, name); \
 	__syncthreads();
+#define MTK_DEBUG_PRINT_DEVICE_MATRIX(ptr, m, n, ldm, name) \
+{\
+	CUTF_CHECK_ERROR(cudaDeviceSynchronize());\
+	auto h_matrix = cutf::memory::get_host_unique_ptr<std::remove_pointer<float>::type>(n * ldm); \
+	cutf::memory::copy(h_matrix.get(), ptr, ldm * n); \
+	cutf::debug::print::print_numpy_matrix(h_matrix.get(), m, n, ldm, name);\
+}
 #define MTK_DEBUG_CALL_FUNC(func) \
 	__syncthreads(); \
 	if (threadIdx.x == 0) func; \
@@ -22,6 +30,7 @@
 	CUTF_CHECK_ERROR(cudaDeviceSynchronize())
 #else
 #define MTK_DEBUG_PRINT_MATRIX(ptr, m, n, ldm, name)
+#define MTK_DEBUG_PRINT_DEVICE_MATRIX(ptr, m, n, ldm, name)
 #define MTK_DEBUG_CALL_FUNC(func)
 #define MTK_DEBUG_CALL_HOST_FUNC(func)
 #define MTK_DEBUG_CHECK_KERNEL_ERROR
@@ -387,6 +396,7 @@ void mtk::tsqr_tc::tsqr(
 		) {
 	assert(n <= 128);
 	MTK_DEBUG_CALL_HOST_FUNC(std::printf("=======DEBUG START========\n= %s\n==========================\n", __func__));
+	MTK_DEBUG_PRINT_DEVICE_MATRIX(a_ptr, m, n, ld_A, "A(Input)");
 	MTK_DEBUG_CALL_HOST_FUNC(std::printf("=======PREPERATION==\n"));
 	for (std::size_t i = 0; i < buffer.get_split_count() + 1; i++) {
 		buffer.get_index_buffer_host_ptr()[i] = i * m / buffer.get_split_count();
@@ -425,6 +435,7 @@ void mtk::tsqr_tc::tsqr(
 
 	for (std::size_t s = buffer.get_split_count(); s > 2; s >>= 1) {
 		MTK_DEBUG_CALL_HOST_FUNC(std::printf("BQR (s=%3lu) [wy_offset = %10lu, r_ptr_flipflop = %u]\n", s, wy_ptr_offset, r_ptr_index));
+		MTK_DEBUG_PRINT_DEVICE_MATRIX(r_buffer_list[1 - r_ptr_index], 2 * n * s, n, 2 * n * s, "Input of BQR");
 		mtk::tsqr_tc::qr256x128_batched<compute_mode>(
 				buffer.get_w_buffer_ptr() + wy_ptr_offset, n * s,
 				buffer.get_y_buffer_ptr() + wy_ptr_offset, n * s,
@@ -435,11 +446,13 @@ void mtk::tsqr_tc::tsqr(
 				buffer.get_index_buffer_ptr(),
 				cuda_stream
 				);
+		MTK_DEBUG_PRINT_DEVICE_MATRIX(r_buffer_list[r_ptr_index], n * s, n, n * s, "Rs");
 		wy_ptr_offset += 2 * n * n * s;
 		r_ptr_index = 1 - r_ptr_index;
 	}
 
 	MTK_DEBUG_CALL_HOST_FUNC(std::printf("BQR (last ) [wy_offset = %10lu, r_ptr_flipflop = %u]\n", wy_ptr_offset, r_ptr_index));
+	MTK_DEBUG_PRINT_DEVICE_MATRIX(r_buffer_list[1 - r_ptr_index], 2 * n, n, 2 * n, "Input of BQR");
 	mtk::tsqr_tc::qr256x128<compute_mode>(
 			buffer.get_w_buffer_ptr() + wy_ptr_offset, 2 * n,
 			buffer.get_y_buffer_ptr() + wy_ptr_offset, 2 * n,
@@ -448,6 +461,7 @@ void mtk::tsqr_tc::tsqr(
 			2 * n, n,
 			cuda_stream
 			);
+	MTK_DEBUG_PRINT_DEVICE_MATRIX(r_ptr, n, n, ld_R, "R");
 
 	MTK_DEBUG_CALL_HOST_FUNC(std::printf("=======BACKWARD=====\n"));
 	// Backward computation
