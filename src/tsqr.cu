@@ -164,6 +164,7 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 		const float* const gmem_C_ptr, const std::size_t ld_C,
 		const std::size_t m, const std::size_t n
 		) {
+	MTK_DEBUG_CALL_FUNC(printf("# ->> %s<%d, %d, %d>(%3lu, %3lu)\n", __func__, A_MINUS, A_TRANS, C_EXIST, m, n));
 	constexpr unsigned block_size = 256;
 	constexpr std::size_t DIM_N = 128;
 	constexpr std::size_t DIM_BLOCK_M = 64;
@@ -448,6 +449,7 @@ void mtk::tsqr_tc::tsqr(
 			buffer.get_index_buffer_ptr(),
 			cuda_stream
 			);
+	MTK_DEBUG_PRINT_DEVICE_MATRIX(r_buffer_list[r_ptr_index], n * buffer.get_split_count(), n, n * buffer.get_split_count(), "Rs");
 	wy_ptr_offset += m * n;
 	r_ptr_index = 1 - r_ptr_index;
 
@@ -495,6 +497,7 @@ void mtk::tsqr_tc::tsqr(
 			);
 	MTK_DEBUG_CHECK_KERNEL_ERROR;
 	MTK_DEBUG_CALL_HOST_FUNC(std::printf("BGEMM (last ) [wy_offset = %10lu]\n", wy_ptr_offset));
+	MTK_DEBUG_PRINT_DEVICE_MATRIX(buffer.get_r_buffer_ptr(), n, n, n, "Input Q (Identity)");
 	tsqr_backward<compute_mode>(
 			buffer.get_w_buffer_ptr() + wy_ptr_offset, 2 * n,
 			buffer.get_w_buffer_ptr() + wy_ptr_offset, 2 * n,
@@ -506,6 +509,7 @@ void mtk::tsqr_tc::tsqr(
 			cuda_stream
 			);
 	MTK_DEBUG_CHECK_KERNEL_ERROR;
+	MTK_DEBUG_PRINT_DEVICE_MATRIX(buffer.get_w_buffer_ptr() + wy_ptr_offset, 2 * n, n, 2 * n, "First Q");
 	for (std::size_t s = 2; s < buffer.get_split_count(); s <<= 1) {
 		const auto prev_wy_ptr_offset = wy_ptr_offset;
 		wy_ptr_offset -= 2 * n * n * s;
