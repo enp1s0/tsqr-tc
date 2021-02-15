@@ -39,7 +39,7 @@
 namespace {
 constexpr unsigned warp_size = 32;
 
-template <unsigned block_size, unsigned DIM_N, int TRANSPOSE, class DST_T, class SRC_T>
+template <unsigned block_size, unsigned DIM_N, class DST_T, class SRC_T>
 __device__ void copy_B_g2s(
 		DST_T* const dst_ptr,
 		const SRC_T* const src_ptr, const std::size_t ld_src,
@@ -55,11 +55,7 @@ __device__ void copy_B_g2s(
 				if (gn < n) {
 					v = src_ptr[gn * ld_src + cutf::thread::get_lane_id() + bm];
 				}
-				if constexpr (TRANSPOSE == 0) {
-					dst_ptr[gn + (cutf::thread::get_lane_id() + bm) * DIM_N] = cutf::type::cast<DST_T>(v);
-				} else {
-					dst_ptr[gn * DIM_N + cutf::thread::get_lane_id() + bm] = cutf::type::cast<DST_T>(v);
-				}
+				dst_ptr[gn * DIM_N + cutf::thread::get_lane_id() + bm] = cutf::type::cast<DST_T>(v);
 			}
 		} else {
 			for (unsigned bn = 0; bn < DIM_N; bn += num_warps) {
@@ -68,11 +64,7 @@ __device__ void copy_B_g2s(
 				if (gn < n && cutf::thread::get_lane_id() < real_bm) {
 					v = src_ptr[gn * ld_src + cutf::thread::get_lane_id() + bm];
 				}
-				if constexpr (TRANSPOSE == 0) {
-					dst_ptr[gn + (cutf::thread::get_lane_id() + bm) * DIM_N] = cutf::type::cast<DST_T>(v);
-				} else {
-					dst_ptr[gn * DIM_N + cutf::thread::get_lane_id() + bm] = cutf::type::cast<DST_T>(v);
-				}
+				dst_ptr[gn * DIM_N + cutf::thread::get_lane_id() + bm] = cutf::type::cast<DST_T>(v);
 			}
 		}
 	}
@@ -186,7 +178,7 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 	float* const smem_A_ptr = smem_B_ptr + DIM_N * DIM_N;
 
 	// Load B
-	copy_B_g2s<block_size, DIM_N, 0>(
+	copy_B_g2s<block_size, DIM_N>(
 			smem_B_ptr,
 			gmem_B_ptr, ld_B,
 			n
