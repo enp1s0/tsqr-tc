@@ -159,6 +159,7 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 	for (std::size_t bm = 0; bm < m; bm += DIM_BLOCK_M) {
 		nvcuda::wmma::fragment<nvcuda::wmma::accumulator, DIM_TC, DIM_TC, DIM_TC, float> frag_C[DIM_BLOCK_M / DIM_TC], frag_d_C[DIM_BLOCK_M / DIM_TC];
 		if constexpr (C_EXIST) {
+			// We use n x n size of matrix C in TSQR even if the size of D is 2n x n.
 			if (bm < n) {
 				const auto real_m = min(DIM_BLOCK_M, n - bm);
 				copy_matrix_g2s_XPxN<block_size, DIM_BLOCK_M, DIM_N>(
@@ -187,7 +188,7 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 		const auto real_m = min(DIM_BLOCK_M, n - bm);
 		copy_matrix_g2s_XPxN<block_size, DIM_BLOCK_M, DIM_N>(
 				smem_A_ptr,
-				gmem_C_ptr + bm, ld_C,
+				gmem_A_ptr + bm, ld_A,
 				real_m, n
 				);
 		__syncthreads();
@@ -215,12 +216,12 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 				});
 			for (auto sn = decltype(DIM_BLOCK_M)(0); sn < DIM_BLOCK_M; sn += DIM_TC) {
 				nvcuda::wmma::fragment<nvcuda::wmma::matrix_a, DIM_TC, DIM_TC, DIM_TC, half, nvcuda::wmma::col_major> frag_A[NUM_BLOCKINGS], frag_d_A[NUM_BLOCKINGS];
-				const auto a_offset = (bm + sn) * DIM_N + bk;
+				const auto a_offset = bk * DIM_BLOCK_M;
 				mtk::wmma::foreach<decltype(frag_A[0])>(
 					[&](const unsigned* frag_index_list, const unsigned fragment_index_count, const unsigned mem_index) {
-						const auto mem_n = mem_index % DIM_TC;
-						const auto mem_m = mem_index / DIM_TC;
-						const auto m_offset = a_offset + mem_m * DIM_N + mem_n;
+						const auto mem_m = mem_index % DIM_TC;
+						const auto mem_n = mem_index / DIM_TC;
+						const auto m_offset = a_offset + mem_n * DIM_BLOCK_M + mem_m;
 						for (unsigned k = 0; k < NUM_BLOCKINGS; k++) {
 							const auto v = smem_A_ptr[m_offset + k * DIM_TC];
 							const auto hv = cutf::type::cast<half>(v);
@@ -328,9 +329,11 @@ void tsqr_backward(
 		const std::size_t* const m_start_list,
 		const cudaStream_t cuda_stream
 		) {
-	const auto block_size = 256;
+	constexpr auto block_size = 256;
+	constexpr auto shared_memory_size = 96 * 1024;
 
-	tsqr_backward_kernel<compute_mode><<<split_size, block_size, 0, cuda_stream>>>(
+	cudaFuncSetAttribute(&tsqr_backward_kernel<compute_mode>, cudaFuncAttributeMaxDynamicSharedMemorySize, shared_memory_size);
+	tsqr_backward_kernel<compute_mode><<<split_size, block_size, shared_memory_size, cuda_stream>>>(
 			gmem_OUT_Q_ptr  , ld_OUT_Q,
 			gmem_W_ptr      , ld_W,
 			gmem_Y_ptr      , ld_Y,
@@ -385,12 +388,9 @@ void mtk::tsqr_tc::tsqr(
 	assert(n <= 128);
 
 	for (std::size_t i = 0; i < buffer.get_split_count() + 1; i++) {
-		buffer.get_index_buffer_ptr()[i] = i * m / buffer.get_split_count();
+		buffer.get_index_buffer_host_ptr()[i] = i * m / buffer.get_split_count();
 	}
 	cutf::memory::copy_async(buffer.get_index_buffer_ptr(), buffer.get_index_buffer_host_ptr(), buffer.get_index_buffer_count(), cuda_stream);
-	for (std::size_t i = 0; i < buffer.get_split_count(); i++) {
-		buffer.get_index_buffer_ptr()[i] = i * (2 * n);
-	}
 
 	unsigned r_ptr_index = 0;
 	typename mtk::tsqr_tc::tsqr_buffer<compute_mode>::buffer_type* r_buffer_list[2];
@@ -468,7 +468,7 @@ void mtk::tsqr_tc::tsqr(
 				);
 	}
 	for (std::size_t i = 0; i < buffer.get_split_count() + 1; i++) {
-		buffer.get_index_buffer_ptr()[i] = i * m / buffer.get_split_count();
+		buffer.get_index_buffer_host_ptr()[i] = i * m / buffer.get_split_count();
 	}
 	cutf::memory::copy_async(buffer.get_index_buffer_ptr(), buffer.get_index_buffer_host_ptr(), buffer.get_index_buffer_count(), cuda_stream);
 	const auto prev_wy_ptr_offset = wy_ptr_offset;
