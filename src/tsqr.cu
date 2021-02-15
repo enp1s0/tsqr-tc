@@ -132,7 +132,7 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 	copy_B_g2s<block_size, DIM_N, B_TRANS>(
 			smem_B_ptr,
 			gmem_B_ptr, ld_B,
-			n, n
+			n
 			);
 	for (std::size_t bm = 0; bm < m; bm += DIM_BLOCK_M) {
 		nvcuda::wmma::fragment<nvcuda::wmma::accumulator, DIM_TC, DIM_TC, DIM_TC, float> frag_C[DIM_BLOCK_M / DIM_TC], frag_d_C[DIM_BLOCK_M / DIM_TC];
@@ -176,7 +176,7 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 				[&](const unsigned* frag_index_list, const unsigned fragment_index_count, const unsigned mem_index) {
 					const auto mem_m = mem_index % DIM_TC;
 					const auto mem_n = mem_index / DIM_TC;
-					const auto m_offset = b_offset + mem_n * DIM_N;
+					const auto m_offset = b_offset + mem_n * DIM_N + mem_m;
 					for (unsigned k = 0; k < NUM_BLOCKINGS; k++) {
 						auto v = smem_B_ptr[m_offset + k * DIM_TC];
 						if constexpr (A_MINUS) {
@@ -198,7 +198,7 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 					[&](const unsigned* frag_index_list, const unsigned fragment_index_count, const unsigned mem_index) {
 						const auto mem_n = mem_index % DIM_TC;
 						const auto mem_m = mem_index / DIM_TC;
-						const auto m_offset = a_offset + mem_m * DIM_N;
+						const auto m_offset = a_offset + mem_m * DIM_N + mem_n;
 						for (unsigned k = 0; k < NUM_BLOCKINGS; k++) {
 							const auto v = smem_A_ptr[m_offset + k * DIM_TC];
 							const auto hv = cutf::type::cast<half>(v);
@@ -281,7 +281,7 @@ __global__ void tsqr_backward_kernel(
 			working_memory_ptr, n,
 			g_Y_ptr, ld_Y,
 			g_IN_Q_ptr, ld_IN_Q,
-			nullptr,
+			nullptr, 0,
 			n, n
 			);
 	__syncthreads();
