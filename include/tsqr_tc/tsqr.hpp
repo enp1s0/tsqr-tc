@@ -39,12 +39,12 @@ public:
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
 void tsqr(
-		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const r_ptr, const std::size_t ld_R,
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const q_ptr, const std::size_t ld_Q,
+		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const r_ptr, const std::size_t ld_R,
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const a_ptr, const std::size_t ld_A,
 		const std::size_t m, const std::size_t n,
 		mtk::tsqr_tc::tsqr_buffer<compute_mode>& buffer,
-		const cudaStream_t cuda_stream
+		const cudaStream_t cuda_stream = 0
 		);
 } // namespace tsqr_tc
 } // namespace mtk
