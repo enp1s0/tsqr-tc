@@ -17,7 +17,7 @@
 	__syncthreads();
 #define MTK_DEBUG_CALL_FUNC(func) \
 	__syncthreads(); \
-	if (threadIdx.x + blockIdx.x == 0) func; \
+	if (threadIdx.x + blockIdx.x == 0) {func;} \
 	__syncthreads();
 #else
 #define MTK_DEBUG_PRINT_MATRIX(ptr, m, n, ldm, name)

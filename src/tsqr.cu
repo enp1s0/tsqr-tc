@@ -11,7 +11,7 @@
 #include <type_traits>
 #define MTK_DEBUG_PRINT_MATRIX(ptr, m, n, ldm, name) \
 	__syncthreads(); \
-	if (threadIdx.x == 0) cutf::debug::print::print_numpy_matrix(ptr, m, n, ldm, name); \
+	if (threadIdx.x + blockIdx.x == 0) cutf::debug::print::print_numpy_matrix(ptr, m, n, ldm, name); \
 	__syncthreads();
 #define MTK_DEBUG_PRINT_DEVICE_MATRIX(ptr, m, n, ldm, name) \
 {\
@@ -22,7 +22,7 @@
 }
 #define MTK_DEBUG_CALL_FUNC(func) \
 	__syncthreads(); \
-	if (threadIdx.x == 0) func; \
+	if (threadIdx.x + blockIdx.x == 0) {func;} \
 	__syncthreads();
 #define MTK_DEBUG_CALL_HOST_FUNC(func) \
 	func;std::fflush(stdout);
