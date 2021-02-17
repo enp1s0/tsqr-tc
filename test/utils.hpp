@@ -25,6 +25,13 @@ double compute_orthogonality_in_dp(
 		);
 
 template <class T>
+double compute_orthogonality_in_dp(
+		const T* const dQ_ptr, const std::size_t ld_Q,
+		const std::size_t m, const std::size_t n,
+		cublasHandle_t const cublas_handle
+		);
+
+template <class T>
 void qr_cublas(
 		T* const dQ_ptr, const std::size_t ld_Q,
 		T* const dR_ptr, const std::size_t ld_R,

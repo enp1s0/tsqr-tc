@@ -185,6 +185,59 @@ double mtk::tsqr_tc::test_utils::compute_orthogonality_in_dp<float>(
 		cublasHandle_t const
 		);
 
+
+template <class T>
+double mtk::tsqr_tc::test_utils::compute_orthogonality_in_dp(
+		const T* const dQ_ptr, const std::size_t ld_Q,
+		const std::size_t m, const std::size_t n,
+		cublasHandle_t const cublas_handle
+		) {
+	auto hQ_dp_uptr = cutf::memory::get_host_unique_ptr<double>(m * n);
+	auto hE_dp_uptr = cutf::memory::get_host_unique_ptr<double>(n * n);
+	convert_matrix(hQ_dp_uptr.get(), m, dQ_ptr, ld_Q, m, n);
+
+	// initialize E
+#pragma omp parallel for
+	for (std::size_t i = 0; i < n * n; i++) {
+		hE_dp_uptr.get()[i] = 0.0;
+	}
+	for (std::size_t i = 0; i < n; i++) {
+		hE_dp_uptr.get()[i * (1 + n)] = 1.0;
+	}
+
+	const auto one = 1.0;
+	const auto m_one = -1.0;
+	CUTF_CHECK_ERROR(
+			cutf::cublas::gemm(
+				cublas_handle,
+				CUBLAS_OP_T, CUBLAS_OP_N,
+				n, n, m,
+				&m_one,
+				hQ_dp_uptr.get(), m,
+				hQ_dp_uptr.get(), m,
+				&one,
+				hE_dp_uptr.get(), n
+				)
+			);
+	CUTF_CHECK_ERROR(cudaDeviceSynchronize());
+
+	double diff_norm = 0.0;
+#pragma omp parallel for reduction(+: diff_norm)
+	for (std::size_t i = 0; i < n * n; i++) {
+		const auto diff = hE_dp_uptr.get()[i];
+		diff_norm += diff * diff;
+	}
+
+	return std::sqrt(diff_norm / n);
+}
+
+template
+double mtk::tsqr_tc::test_utils::compute_orthogonality_in_dp<float>(
+		const float* const, const std::size_t,
+		const std::size_t, const std::size_t,
+		cublasHandle_t const
+		);
+
 // CUSOLVER QR
 namespace {
 template <class T>
