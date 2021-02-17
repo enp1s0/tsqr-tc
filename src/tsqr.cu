@@ -204,7 +204,7 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 						gmem_C_ptr + bm, ld_C,
 						real_m, n
 						);
-				MTK_DEBUG_PRINT_MATRIX(smem_A_ptr, real_m, n, DIM_BLOCK_M, "C");
+				MTK_DEBUG_PRINT_MATRIX(smem_A_ptr, DIM_BLOCK_M, n, DIM_BLOCK_M, "C");
 				__syncthreads();
 				for (auto sn = decltype(DIM_BLOCK_M)(0); sn < DIM_BLOCK_M; sn += DIM_TC) {
 					auto load_ptr = smem_A_ptr + DIM_BLOCK_M * DIM_TC * cutf::thread::get_warp_id() + sn;
@@ -429,6 +429,7 @@ void mtk::tsqr_tc::tsqr(
 	assert(n <= 128);
 	MTK_DEBUG_CALL_HOST_FUNC(std::printf("=======DEBUG START========\n= %s\n==========================\n", __func__));
 	MTK_DEBUG_PRINT_DEVICE_MATRIX(a_ptr, m, n, ld_A, "A(Input)");
+	MTK_DEBUG_CALL_HOST_FUNC(std::printf("Split count : %lu\n", buffer.get_split_count()));
 	MTK_DEBUG_CALL_HOST_FUNC(std::printf("=======PREPERATION==\n"));
 	for (std::size_t i = 0; i < buffer.get_split_count() + 1; i++) {
 		buffer.get_index_buffer_host_ptr()[i] = i * m / buffer.get_split_count();
