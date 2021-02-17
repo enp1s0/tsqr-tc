@@ -6,10 +6,11 @@ LIBDIR=lib
 TESTDIR=test
 INCLUDEDIR=include
 
-NVCCFLAGS=-std=c++17
+NVCCFLAGS=-std=c++17 -t0
 NVCCFLAGS+=-I./$(SRCDIR)/cutf/include
 NVCCFLAGS+=-I./$(SRCDIR)/wmma_extension/include
 NVCCFLAGS+=-gencode arch=compute_86,code=sm_86
+NVCCFLAGS+=-gencode arch=compute_80,code=sm_80
 
 NVCCFLAGS+=-I./$(INCLUDEDIR)
 
