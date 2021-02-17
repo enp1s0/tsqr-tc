@@ -5,14 +5,27 @@
 #include <cutf/type.hpp>
 #include <wmma_extension.hpp>
 
-#define MTK_DEBUG
-#ifdef MTK_DEBUG
+//#define MTK_DEBUG_DEVICE
+//#define MTK_DEBUG_HOST
+#ifdef MTK_DEBUG_DEVICE
 #include <cutf/debug/matrix.hpp>
 #include <type_traits>
 #define MTK_DEBUG_PRINT_MATRIX(ptr, m, n, ldm, name) \
 	__syncthreads(); \
 	if (threadIdx.x + blockIdx.x == 0) cutf::debug::print::print_numpy_matrix(ptr, m, n, ldm, name); \
 	__syncthreads();
+#define MTK_DEBUG_CALL_FUNC(func) \
+	__syncthreads(); \
+	if (threadIdx.x + blockIdx.x == 0) {func;} \
+	__syncthreads();
+#else
+#define MTK_DEBUG_PRINT_MATRIX(ptr, m, n, ldm, name)
+#define MTK_DEBUG_CALL_FUNC(func)
+#endif
+//
+#ifdef MTK_DEBUG_HOST
+#include <cutf/debug/matrix.hpp>
+#include <type_traits>
 #define MTK_DEBUG_PRINT_DEVICE_MATRIX(ptr, m, n, ldm, name) \
 {\
 	CUTF_CHECK_ERROR(cudaDeviceSynchronize());\
@@ -20,18 +33,12 @@
 	cutf::memory::copy(h_matrix.get(), ptr, ldm * n); \
 	cutf::debug::print::print_numpy_matrix(h_matrix.get(), m, n, ldm, name);\
 }
-#define MTK_DEBUG_CALL_FUNC(func) \
-	__syncthreads(); \
-	if (threadIdx.x + blockIdx.x == 0) {func;} \
-	__syncthreads();
 #define MTK_DEBUG_CALL_HOST_FUNC(func) \
 	func;std::fflush(stdout);
 #define MTK_DEBUG_CHECK_KERNEL_ERROR \
 	CUTF_CHECK_ERROR(cudaDeviceSynchronize())
 #else
-#define MTK_DEBUG_PRINT_MATRIX(ptr, m, n, ldm, name)
 #define MTK_DEBUG_PRINT_DEVICE_MATRIX(ptr, m, n, ldm, name)
-#define MTK_DEBUG_CALL_FUNC(func)
 #define MTK_DEBUG_CALL_HOST_FUNC(func)
 #define MTK_DEBUG_CHECK_KERNEL_ERROR
 #endif
