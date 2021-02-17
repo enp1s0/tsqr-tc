@@ -40,9 +40,8 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 	}
 
 #ifdef MTK_PRINT_MATRICES
-	cutf::debug::print::print_numpy_matrix(hA_uptr.get(), m, n, "A");
+	cutf::memory::copy(dA_uptr.get(), hA_uptr.get(), m * n * batch_size);
 #endif
-	cutf::memory::copy(dA_uptr.get(), hA_uptr.get(), m * n);
 
 	auto d_start_m_list = cutf::memory::get_device_unique_ptr<std::size_t>(batch_size + 1);
 	auto h_start_m_list = cutf::memory::get_host_unique_ptr<std::size_t>(batch_size + 1);
