@@ -3,7 +3,12 @@
 #include <chrono>
 #include <tsqr_tc/tsqr.hpp>
 #include <cutf/memory.hpp>
+#include <cutf/cublas.hpp>
 #include <cutf/type.hpp>
+#include <cutf/stream.hpp>
+#include <cutf/debug/matrix.hpp>
+
+#include "utils.hpp"
 
 constexpr float rand_abs_max = 1.0f;
 
@@ -29,10 +34,9 @@ void test_accuracy(const unsigned m, const unsigned n) {
 		}
 	}
 
-#ifdef MTK_PRINT_MATRICES
-	cutf::debug::print::print_numpy_matrix(hA_uptr.get(), m, n, "A");
-#endif
 	cutf::memory::copy(dA_uptr.get(), hA_uptr.get(), m * n);
+
+	auto cuda_stream_uptr = cutf::stream::get_stream_unique_ptr();
 
 	mtk::tsqr_tc::tsqr_buffer<compute_mode> tsqr_buffer(m, n);
 	tsqr_buffer.allocate();
@@ -44,14 +48,28 @@ void test_accuracy(const unsigned m, const unsigned n) {
 			dR_uptr.get(), n,
 			dA_uptr.get(), m,
 			m, n,
-			tsqr_buffer
+			tsqr_buffer,
+			*cuda_stream_uptr.get()
 			);
 	CUTF_CHECK_ERROR(cudaDeviceSynchronize());
 	const auto end_clock = std::chrono::high_resolution_clock::now();
 	const auto elapsed_time = std::chrono::duration_cast<std::chrono::nanoseconds>(end_clock - start_clock).count() * 1e-9;
 	std::printf("%20s : %e [s]\n", "time", elapsed_time);
+
+	auto cublas_handle = cutf::cublas::get_cublas_unique_ptr();
+
+	cutf::memory::copy(hR_uptr.get(), dR_uptr.get(), n * n);
+
+	cutf::memory::copy(hQ_uptr.get(), dQ_uptr.get(), m * n);
+	const auto orthogonality = mtk::tsqr_tc::test_utils::compute_orthogonality_in_dp(
+			dQ_uptr.get(), m,
+			m, n,
+			*cublas_handle.get()
+			);
+
+	std::printf("%20s : %e\n", "orthogonality", orthogonality);
 }
 
 int main() {
-	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_hmma_cor>(1lu << 10, 128);
+	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_hmma_cor>(1lu << 20, 64);
 }
