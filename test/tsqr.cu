@@ -66,8 +66,16 @@ void test_accuracy(const unsigned m, const unsigned n) {
 			m, n,
 			*cublas_handle.get()
 			);
+	const auto residual = mtk::tsqr_tc::test_utils::compute_residual_in_dp(
+			dQ_uptr.get(), m,
+			dR_uptr.get(), n,
+			dA_uptr.get(), m,
+			m, n,
+			*cublas_handle.get()
+			);
 
 	std::printf("%20s : %e\n", "orthogonality", orthogonality);
+	std::printf("%20s : %e\n", "residual", residual);
 }
 
 int main() {
