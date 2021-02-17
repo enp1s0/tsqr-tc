@@ -462,6 +462,7 @@ void mtk::tsqr_tc::tsqr(
 	wy_ptr_offset += m * n;
 	r_ptr_index = 1 - r_ptr_index;
 
+	CUTF_CHECK_ERROR(cudaStreamSynchronize(cuda_stream));
 	for (std::size_t i = 0; i < buffer.get_split_count() + 1; i++) {
 		buffer.get_index_buffer_host_ptr()[i] = i * (2 * n);
 	}
