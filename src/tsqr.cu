@@ -77,7 +77,7 @@ __device__ void copy_B_g2s(
 	}
 }
 
-template <unsigned block_size, unsigned DIM_XP, unsigned DIM_N, unsigned trans, class DST_T, class SRC_T>
+template <unsigned block_size, unsigned DIM_XP, unsigned DIM_N, unsigned TRANS, class DST_T, class SRC_T>
 __device__ void copy_matrix_g2s_XPxN(
 		DST_T* const dst_ptr,
 		const SRC_T* const src_ptr, const std::size_t ld_src,
@@ -85,9 +85,9 @@ __device__ void copy_matrix_g2s_XPxN(
 		) {
 	constexpr auto num_warps = block_size / warp_size;
 
-	if constexpr (trans == 0) {
+	if constexpr (TRANS == 0) {
 		for (unsigned bm = 0; bm < DIM_XP; bm += warp_size) {
-			const auto real_bm = min(warp_size, m - bm);
+			const auto real_bm = min(warp_size, max(m, bm) - bm);
 			if (real_bm == warp_size) {
 				for (unsigned bn = 0; bn < DIM_N; bn += num_warps) {
 					const auto gn = bn + cutf::thread::get_warp_id();
@@ -110,7 +110,7 @@ __device__ void copy_matrix_g2s_XPxN(
 		}
 	} else {
 		for (unsigned bm = 0; bm < DIM_XP; bm += warp_size) {
-			const auto real_bm = min(warp_size, m - bm);
+			const auto real_bm = min(warp_size, max(m, bm) - bm);
 			if (real_bm == warp_size) {
 				for (unsigned bn = 0; bn < DIM_N; bn += num_warps) {
 					const auto gn = bn + cutf::thread::get_warp_id();
@@ -192,6 +192,7 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 			n
 			);
 	MTK_DEBUG_PRINT_MATRIX(smem_B_ptr, n, n, DIM_N, "B");
+	__syncthreads();
 	for (std::size_t bm = 0; bm < m; bm += DIM_BLOCK_M) {
 		nvcuda::wmma::fragment<nvcuda::wmma::accumulator, DIM_TC, DIM_TC, DIM_TC, float> frag_C[DIM_BLOCK_M / DIM_TC], frag_d_C[DIM_BLOCK_M / DIM_TC];
 		if constexpr (C_EXIST) {
