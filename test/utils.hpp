@@ -17,6 +17,15 @@ double compute_residual_in_dp(
 		);
 
 template <class T>
+double compute_residual_in_dp(
+		const T* const dQ_ptr, const std::size_t ld_Q,
+		const T* const dR_ptr, const std::size_t ld_R,
+		const T* const dA_ptr, const std::size_t ld_A,
+		const std::size_t m, const std::size_t n,
+		cublasHandle_t const cublas_handle
+		);
+
+template <class T>
 double compute_orthogonality_in_dp(
 		const T* const dW_ptr, const std::size_t ld_W,
 		const T* const dY_ptr, const std::size_t ld_Y,

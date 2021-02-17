@@ -109,6 +109,69 @@ double mtk::tsqr_tc::test_utils::compute_residual_in_dp<float>(
 
 
 template <class T>
+double mtk::tsqr_tc::test_utils::compute_residual_in_dp(
+		const T* const dQ_ptr, const std::size_t ld_Q,
+		const T* const dR_ptr, const std::size_t ld_R,
+		const T* const dA_ptr, const std::size_t ld_A,
+		const std::size_t m, const std::size_t n,
+		cublasHandle_t const cublas_handle
+		) {
+	auto hR_dp_uptr = cutf::memory::get_host_unique_ptr<double>(n * n);
+	auto hQ_dp_uptr = cutf::memory::get_host_unique_ptr<double>(m * n);
+	auto hA_dp_uptr = cutf::memory::get_host_unique_ptr<double>(m * n);
+	convert_matrix(hR_dp_uptr.get(), n, dR_ptr, ld_R, n, n);
+	convert_matrix(hQ_dp_uptr.get(), m, dQ_ptr, ld_Q, m, n);
+	convert_matrix(hA_dp_uptr.get(), m, dA_ptr, ld_A, m, n);
+	CUTF_CHECK_ERROR(cudaDeviceSynchronize());
+
+	double base_norm = 0.0;
+#pragma omp parallel for reduction(+: base_norm)
+	for (std::size_t i = 0; i < m * n; i++) {
+		const auto base = hA_dp_uptr.get()[i];
+
+		base_norm += base * base;
+	}
+	CUTF_CHECK_ERROR(cudaDeviceSynchronize());
+
+	const auto one = 1.0;
+	const auto m_one = -1.0;
+	CUTF_CHECK_ERROR(
+			cutf::cublas::gemm(
+				cublas_handle,
+				CUBLAS_OP_N, CUBLAS_OP_N,
+				m, n, n,
+				&one,
+				hQ_dp_uptr.get(), m,
+				hR_dp_uptr.get(), n,
+				&m_one,
+				hA_dp_uptr.get(), m
+				)
+			);
+	CUTF_CHECK_ERROR(cudaDeviceSynchronize());
+
+	// compute_diff
+	double diff_norm = 0.0;
+#pragma omp parallel for reduction(+: diff_norm)
+	for (std::size_t i = 0; i < m * n; i++) {
+		const auto diff = hA_dp_uptr.get()[i];
+
+		diff_norm += diff * diff;
+	}
+
+	return std::sqrt(diff_norm / base_norm);
+}
+
+template
+double mtk::tsqr_tc::test_utils::compute_residual_in_dp<float>(
+		const float* const, const std::size_t,
+		const float* const, const std::size_t,
+		const float* const, const std::size_t,
+		const std::size_t, const std::size_t,
+		cublasHandle_t const
+		);
+
+
+template <class T>
 double mtk::tsqr_tc::test_utils::compute_orthogonality_in_dp(
 		const T* const dW_ptr, const std::size_t ld_W,
 		const T* const dY_ptr, const std::size_t ld_Y,
