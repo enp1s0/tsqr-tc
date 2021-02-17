@@ -51,10 +51,11 @@ double mtk::tsqr_tc::test_utils::compute_residual_in_dp(
 	convert_matrix(hW_dp_uptr.get(), m, dW_ptr, ld_W, m, n);
 	convert_matrix(hY_dp_uptr.get(), n, dY_ptr, ld_Y, n, n);
 	convert_matrix(hA_dp_uptr.get(), m, dA_ptr, ld_A, m, n);
+	CUTF_CHECK_ERROR(cudaDeviceSynchronize());
 
 	const auto one = 1.0;
 	const auto m_one = -1.0;
-	const auto zero = 1.0;
+	const auto zero = 0.0;
 	CUTF_CHECK_ERROR(
 			cutf::cublas::gemm(
 				cublas_handle,

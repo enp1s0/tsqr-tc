@@ -76,7 +76,7 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 
 #ifdef MTK_PRINT_MATRICES
 	// Compute using cusolver
-	if (batch_size == 1) {
+	for (std::size_t s = 0; s < batch_size; s++) {
 		cutf::debug::print::print_numpy_matrix(hR_uptr.get(), n, n, "R (output)");
 		cutf::debug::print::print_numpy_matrix(hW_uptr.get(), m, n, "W (output)");
 		cutf::debug::print::print_numpy_matrix(hY_uptr.get(), m, n, "Y (output)");
@@ -84,12 +84,12 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 		auto cusolver_handle = cutf::cusolver::get_cusolver_dn_unique_ptr();
 		auto hR_cusolver_uptr = cutf::memory::get_host_unique_ptr<compute_t>(n * n);
 		auto hQ_cusolver_uptr = cutf::memory::get_host_unique_ptr<compute_t>(m * n);
-		CUTF_CHECK_ERROR(cudaMemset(hQ_cusolver_uptr.get(), 0, m * n));
-		CUTF_CHECK_ERROR(cudaMemset(hR_cusolver_uptr.get(), 0, n * n));
+		CUTF_CHECK_ERROR(cudaMemset(hQ_cusolver_uptr.get(), 0, m * n * batch_size));
+		CUTF_CHECK_ERROR(cudaMemset(hR_cusolver_uptr.get(), 0, n * n * batch_size));
 		mtk::tsqr_tc::test_utils::qr_cublas(
-				hQ_cusolver_uptr.get(), m,
-				hR_cusolver_uptr.get(), n,
-				dA_uptr.get(), m,
+				hQ_cusolver_uptr.get() + s * m, m,
+				hR_cusolver_uptr.get() + s * n, n,
+				dA_uptr.get() + s * m, m,
 				m, n,
 				*cusolver_handle.get()
 				);
@@ -99,29 +99,35 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 	}
 #endif
 
-	if (batch_size == 1) {
-		auto cublas_handle = cutf::cublas::get_cublas_unique_ptr();
-
-		const auto residual = mtk::tsqr_tc::test_utils::compute_residual_in_dp(
-				dR_uptr.get(), n,
-				dW_uptr.get(), m,
-				dY_uptr.get(), m,
-				dA_uptr.get(), m,
+	auto cublas_handle = cutf::cublas::get_cublas_unique_ptr();
+	double residual = 0.;
+	double orthogonality = 0.;
+	for (std::size_t s = 0; s < batch_size; s++) {
+		const auto r = mtk::tsqr_tc::test_utils::compute_residual_in_dp(
+				dR_uptr.get() + s * n, n * batch_size,
+				dW_uptr.get() + s * m, m * batch_size,
+				dY_uptr.get() + s * m, m * batch_size,
+				dA_uptr.get() + s * m, m * batch_size,
 				m, n,
 				*cublas_handle.get()
 				);
 
-		const auto orthogonality = mtk::tsqr_tc::test_utils::compute_orthogonality_in_dp(
-				dW_uptr.get(), m,
-				dY_uptr.get(), m,
+		const auto o = mtk::tsqr_tc::test_utils::compute_orthogonality_in_dp(
+				dW_uptr.get() + s * m, m * batch_size,
+				dY_uptr.get() + s * m, m * batch_size,
 				m, n,
 				*cublas_handle.get()
 				);
-		std::printf("%20s : %e\n", "residual", residual);
-		std::printf("%20s : %e\n", "orthogonality", orthogonality);
+
+		residual += r;
+		orthogonality += o;
 	}
+	residual /= batch_size;
+	orthogonality /= batch_size;
+	std::printf("%20s : %e\n", "residual", residual);
+	std::printf("%20s : %e\n", "orthogonality", orthogonality);
 }
 
 int main() {
-	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_hmma_cor>(256, 256, 1);
+	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_hmma_cor>(256, 256, 1lu << 12);
 }
