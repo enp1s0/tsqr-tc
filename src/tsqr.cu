@@ -84,6 +84,7 @@ __device__ void copy_matrix_g2s_XPxN(
 		const unsigned m, const unsigned n
 		) {
 	constexpr auto num_warps = block_size / warp_size;
+	MTK_DEBUG_CALL_FUNC(printf("# ->> %s<DIM_XP = %3u, DIM_N = %3u, TRANS = %u>(m = %3u, n = %3u, lda = %5lu)\n", __func__, DIM_XP, DIM_N, TRANS, m, n, ld_src));
 
 	if constexpr (TRANS == 0) {
 		for (unsigned bm = 0; bm < DIM_XP; bm += warp_size) {
