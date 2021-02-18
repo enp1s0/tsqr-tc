@@ -40,12 +40,14 @@ nvcc -L/path/to/tsqr-tc/lib -I/path/to/tsqr-tc/include -ltsqr-tc ...
 // Compute QR factorization of a m x n matrix
 #include <tsqr_tc/tsqr.hpp>
 
+constexpr compute_mode = mtk::tsqr_tc::compute_mode::fp32_hmma_cor;
+
 int main() {
 	// ...
 	mtk::tsqr_tc::tsqr_buffer<compute_mode> tsqr_buffer(m, n);
 	tsqr_buffer.allocate();
 
-	mtk::tsqr_tc::tsqr(
+	mtk::tsqr_tc::tsqr<compute_mode>(
 			dQ, m,
 			dR, n,
 			dA, m,
