@@ -225,14 +225,24 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 			}
 		}
 		const auto real_m = min(DIM_BLOCK_M, m - bm);
-		copy_matrix_g2s_XPxN<block_size, DIM_BLOCK_M, DIM_N, A_TRANS>(
-				smem_A_ptr,
-				gmem_A_ptr + bm, ld_A,
-				real_m, n
-				);
+		MTK_DEBUG_PRINT_MATRIX(gmem_A_ptr, m, n, ld_A, "GMEM_A");
+		if constexpr (A_TRANS == 0) {
+			copy_matrix_g2s_XPxN<block_size, DIM_BLOCK_M, DIM_N, A_TRANS>(
+					smem_A_ptr,
+					gmem_A_ptr + bm, ld_A,
+					real_m, n
+					);
+		} else {
+			copy_matrix_g2s_XPxN<block_size, DIM_BLOCK_M, DIM_N, A_TRANS>(
+					smem_A_ptr,
+					gmem_A_ptr + bm * ld_A, ld_A,
+					real_m, n
+					);
+		}
 		MTK_DEBUG_PRINT_MATRIX(smem_A_ptr, real_m, n, DIM_BLOCK_M, "A block");
 		__syncthreads();
 		for (auto bk = decltype(DIM_N)(0); bk < DIM_N; bk += K_BLOCKING) {
+			const auto real_num_blockings = min(NUM_BLOCKINGS, (n - bk + DIM_TC - 1) / DIM_TC);
 			nvcuda::wmma::fragment<nvcuda::wmma::matrix_b, DIM_TC, DIM_TC, DIM_TC, half, nvcuda::wmma::col_major> frag_B[NUM_BLOCKINGS], frag_d_B[NUM_BLOCKINGS];
 			const auto b_offset = cutf::thread::get_warp_id() * DIM_N * DIM_TC + bk;
 			mtk::wmma::foreach<decltype(frag_B[0])>(
@@ -240,7 +250,7 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 					const auto mem_m = mem_index % DIM_TC;
 					const auto mem_n = mem_index / DIM_TC;
 					const auto m_offset = b_offset + mem_n * DIM_N + mem_m;
-					for (unsigned k = 0; k < NUM_BLOCKINGS; k++) {
+					for (unsigned k = 0; k < real_num_blockings; k++) {
 						auto v = smem_B_ptr[m_offset + k * DIM_TC];
 						if constexpr (A_MINUS) {
 							v *= -1.f;
@@ -262,7 +272,7 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 						const auto mem_m = mem_index % DIM_TC;
 						const auto mem_n = mem_index / DIM_TC;
 						const auto m_offset = a_offset + mem_n * DIM_BLOCK_M + mem_m;
-						for (unsigned k = 0; k < NUM_BLOCKINGS; k++) {
+						for (unsigned k = 0; k < real_num_blockings; k++) {
 							const auto v = smem_A_ptr[m_offset + k * DIM_TC * DIM_BLOCK_M];
 							const auto hv = cutf::type::cast<half>(v);
 							const auto dhv = cutf::type::cast<half>((v - cutf::type::cast<float>(hv)) * cor_scale);
@@ -275,7 +285,7 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 					});
 
 				const auto c_index = sn / DIM_TC;
-				for (unsigned k = 0; k < NUM_BLOCKINGS; k++) {
+				for (unsigned k = 0; k < real_num_blockings; k++) {
 					nvcuda::wmma::mma_sync(frag_d_C[c_index], frag_A  [k], frag_d_B[k], frag_d_C[c_index]);
 					nvcuda::wmma::mma_sync(frag_d_C[c_index], frag_d_A[k], frag_B  [k], frag_d_C[c_index]);
 					nvcuda::wmma::mma_sync(frag_C  [c_index], frag_A  [k], frag_B  [k], frag_C  [c_index]);
