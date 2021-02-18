@@ -1,6 +1,7 @@
 # TSQR on TesnorCores
 
 This library provides a TSQR function which works on NVIDIA TensorCores.
+The function compute a QR factorization of a m x n matrix (n <= 128).
 
 ## Supported GPUs
 - Volta
@@ -32,6 +33,27 @@ make
 3. Link to your program
 ```bash
 nvcc -L/path/to/tsqr-tc/lib -I/path/to/tsqr-tc/include -ltsqr-tc ...
+```
+
+## Sample code
+```cuda
+// Compute QR factorization of a m x n matrix
+#include <tsqr_tc/tsqr.hpp>
+
+int main() {
+	// ...
+	mtk::tsqr_tc::tsqr_buffer<compute_mode> tsqr_buffer(m, n);
+	tsqr_buffer.allocate();
+
+	mtk::tsqr_tc::tsqr(
+			dQ, m,
+			dR, n,
+			dA, m,
+			m, n,
+			tsqr_buffer
+			);
+}
+
 ```
 
 ## Algorithm
