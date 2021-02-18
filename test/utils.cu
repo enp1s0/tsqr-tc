@@ -453,7 +453,7 @@ void mtk::tsqr_tc::test_utils::test_performance_cublas(const std::size_t m, cons
 
 	const double elapsed_time = std::chrono::duration_cast<std::chrono::microseconds>(end_clock - start_clock).count() * 1e-6 / test_count;
 
-	std::printf("%lu,%lu,cusolver,%e,%d\n", m, n, elapsed_time, std::max(geqrf_working_memory_size, gqr_working_memory_size));
+	std::printf("%lu,%lu,cusolver,%e,%d\n", m, n, elapsed_time, std::max(geqrf_working_memory_size, gqr_working_memory_size) * sizeof(T));
 	std::fflush(stdout);
 }
 
