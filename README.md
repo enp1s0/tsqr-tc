@@ -2,9 +2,21 @@
 
 This library provides a TSQR function which works on NVIDIA TensorCores.
 
+## Supported GPUs
+- Volta
+- Ampere
+
+This library does not support Turing architecture because it does not have enough shared memory.
+
 ## Requirements
 - C++ >= 17
-- CUDA >= 9.2
+- CUDA >= 11.2
+
+## Supported computation mode
+
+|  Mode name    | TensorCore | Error correction |
+|:--------------|:-----------|:-----------------|
+|`fp32_hmma_cor`| HMMA       | Yes              |
 
 ## Hou to use
 1. Clone this repository
