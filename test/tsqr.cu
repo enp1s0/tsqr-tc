@@ -12,12 +12,16 @@
 constexpr float rand_abs_max = 1.0f;
 constexpr unsigned test_count = 16;
 
+//#define MTK_DEBUG_PRINT
+
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
 void test_accuracy(const std::size_t m, const std::size_t n, const unsigned test_count) {
 	using compute_t = typename mtk::tsqr_tc::detail::get_type<compute_mode>::type;
 	auto hA_uptr = cutf::memory::get_host_unique_ptr<compute_t>(m * n);
+#ifdef MTK_DEBUG_PRINT
 	auto hQ_uptr = cutf::memory::get_host_unique_ptr<compute_t>(m * n);
 	auto hR_uptr = cutf::memory::get_host_unique_ptr<compute_t>(n * n);
+#endif
 
 	auto dA_uptr = cutf::memory::get_device_unique_ptr<compute_t>(m * n);
 	auto dQ_uptr = cutf::memory::get_device_unique_ptr<compute_t>(m * n);
@@ -38,6 +42,9 @@ void test_accuracy(const std::size_t m, const std::size_t n, const unsigned test
 				hA_uptr.get()[i] = cutf::type::cast<compute_t>(dist(mt));
 			}
 		}
+#ifdef MTK_DEBUG_PRINT
+		cutf::debug::print::print_numpy_matrix(hA_uptr.get(), m, n, "Input_A");
+#endif
 
 		cutf::memory::copy(dA_uptr.get(), hA_uptr.get(), m * n);
 
@@ -69,6 +76,12 @@ void test_accuracy(const std::size_t m, const std::size_t n, const unsigned test
 				);
 		residual += r;
 		orthogonality += o;
+#ifdef MTK_DEBUG_PRINT
+		cutf::memory::copy(hR_uptr.get(), dR_uptr.get(), n * n);
+		cutf::memory::copy(hQ_uptr.get(), dQ_uptr.get(), m * n);
+		cutf::debug::print::print_numpy_matrix(hR_uptr.get(), n, n, "Output_R");
+		cutf::debug::print::print_numpy_matrix(hQ_uptr.get(), m, n, "Outout_Q");
+#endif
 	}
 
 	residual /= test_count;
