@@ -54,6 +54,13 @@ void qr_cublas(
 		const std::size_t m, const std::size_t n,
 		cusolverDnHandle_t const cusolver_handle
 		);
+
+template <class T>
+void test_performance_cublas(
+		const std::size_t m,
+		const std::size_t n,
+		const unsigned test_count
+		);
 } // namespace test_utils
 } // namespace tsqr_tc
 } // namespace mtk

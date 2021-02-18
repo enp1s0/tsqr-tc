@@ -1,6 +1,10 @@
+#include <iostream>
+#include <chrono>
+#include <random>
 #include "utils.hpp"
 #include <cutf/memory.hpp>
 #include <cutf/type.hpp>
+#include <cutf/cusolver.hpp>
 
 namespace {
 template <class DST_T, class SRC_T>
@@ -387,3 +391,71 @@ void mtk::tsqr_tc::test_utils::qr_cublas<float>(
 		const std::size_t m, const std::size_t n,
 		cusolverDnHandle_t const cusolver_handle
 		);
+
+
+template <class T>
+void mtk::tsqr_tc::test_utils::test_performance_cublas(const std::size_t m, const std::size_t n, const unsigned test_count) {
+	auto cusolver_handle = cutf::cusolver::get_cusolver_dn_unique_ptr();
+	auto hA_uptr = cutf::memory::get_host_unique_ptr<T>(m * n);
+
+	auto dA_uptr = cutf::memory::get_device_unique_ptr<T>(m * n);
+	auto dQ_uptr = cutf::memory::get_device_unique_ptr<T>(m * n);
+	auto dR_uptr = cutf::memory::get_device_unique_ptr<T>(n * n);
+
+	auto d_tau = cutf::memory::get_device_unique_ptr<T>(n * n);
+	int geqrf_working_memory_size, gqr_working_memory_size;
+	CUTF_CHECK_ERROR(cutf::cusolver::dn::geqrf_buffer_size(
+				*cusolver_handle.get(), m, n,
+				dQ_uptr.get(), m, &geqrf_working_memory_size
+				));
+	CUTF_CHECK_ERROR(cutf::cusolver::dn::gqr_buffer_size(
+				*cusolver_handle.get(), m, n, n,
+				dQ_uptr.get(), m, d_tau.get(), &gqr_working_memory_size
+				));
+
+	auto d_geqrf_working_memory = cutf::memory::get_device_unique_ptr<T>(geqrf_working_memory_size);
+	auto d_gqr_working_memory = cutf::memory::get_device_unique_ptr<T>(gqr_working_memory_size);
+	auto d_info = cutf::memory::get_device_unique_ptr<int>(1);
+
+	// initialize input matrix
+	{
+		std::mt19937 mt(std::random_device{}());
+		std::uniform_real_distribution<T> dist(-1., 1.);
+		for (unsigned i = 0; i < m * n; i++) {
+			hA_uptr.get()[i] = cutf::type::cast<T>(dist(mt));
+		}
+	}
+	cutf::memory::copy(dA_uptr.get(), hA_uptr.get(), m * n);
+
+	const auto start_clock = std::chrono::high_resolution_clock::now();
+	for (unsigned c = 0; c < test_count; c++) {
+
+		CUTF_CHECK_ERROR(cutf::cusolver::dn::geqrf(
+					*cusolver_handle.get(), m, n,
+					dQ_uptr.get(), m, d_tau.get(), d_geqrf_working_memory.get(),
+					geqrf_working_memory_size, d_info.get()
+					));
+		cut_r(
+				dR_uptr.get(), n,
+				dQ_uptr.get(), m,
+				n
+			 );
+
+		CUTF_CHECK_ERROR(cutf::cusolver::dn::gqr(
+					*cusolver_handle.get(), m, n, n,
+					dQ_uptr.get(), m,
+					d_tau.get(), d_gqr_working_memory.get(), gqr_working_memory_size,
+					d_info.get()
+					));
+	}
+	CUTF_CHECK_ERROR(cudaDeviceSynchronize());
+	const auto end_clock = std::chrono::high_resolution_clock::now();
+
+	const double elapsed_time = std::chrono::duration_cast<std::chrono::microseconds>(end_clock - start_clock).count() * 1e-6 / test_count;
+
+	std::printf("%lu,%lu,cusolver,%e,%d\n", m, n, elapsed_time, std::max(geqrf_working_memory_size, gqr_working_memory_size));
+	std::fflush(stdout);
+}
+
+template
+void mtk::tsqr_tc::test_utils::test_performance_cublas<float >(const std::size_t, const std::size_t, const unsigned);
