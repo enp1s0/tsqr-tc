@@ -11,6 +11,8 @@ NVCCFLAGS+=-I./$(SRCDIR)/cutf/include
 NVCCFLAGS+=-I./$(SRCDIR)/wmma_extension/include
 NVCCFLAGS+=-gencode arch=compute_86,code=sm_86
 NVCCFLAGS+=-gencode arch=compute_80,code=sm_80
+NVCCFLAGS+=-gencode arch=compute_75,code=sm_75
+NVCCFLAGS+=-gencode arch=compute_70,code=sm_70
 
 NVCCFLAGS+=-I./$(INCLUDEDIR)
 
