@@ -9,6 +9,8 @@
 #include "utils.hpp"
 
 //#define MTK_DEBUG
+//#define MTK_CLOCK_BREAKDOWN
+
 #ifdef MTK_DEBUG
 #include <cutf/debug/matrix.hpp>
 #define MTK_DEBUG_PRINT_MATRIX(ptr, m, n, ldm, name) \
