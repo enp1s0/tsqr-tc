@@ -63,13 +63,13 @@ void mtk::tsqr_tc::tsqr_buffer<compute_mode>::allocate() {
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
 void mtk::tsqr_tc::tsqr_buffer<compute_mode>::free() {
-	auto free_func = [](auto* ptr) {
+	const auto free_func = [](auto* ptr) {
 		if (ptr != nullptr) {
 			CUTF_CHECK_ERROR(cudaFree(ptr));
 			ptr = nullptr;
 		}
 	};
-	auto free_host_func = [](auto* ptr) {
+	const auto free_host_func = [](auto* ptr) {
 		if (ptr != nullptr) {
 			CUTF_CHECK_ERROR(cudaFreeHost(ptr));
 			ptr = nullptr;
