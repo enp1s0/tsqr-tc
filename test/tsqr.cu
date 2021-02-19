@@ -39,8 +39,6 @@ void test_accuracy(const std::size_t m, const std::size_t n, const unsigned test
 	double orthogonality = 0.;
 	double residual = 0.;
 
-	auto cuda_stream_uptr = cutf::stream::get_stream_unique_ptr();
-
 	for (unsigned c = 0; c < test_count; c++) {
 		// initialize input matrix
 		{
