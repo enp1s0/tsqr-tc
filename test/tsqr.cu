@@ -12,6 +12,8 @@
 
 constexpr float rand_abs_max = 1.0f;
 constexpr unsigned test_count = 16;
+constexpr std::size_t max_m_log = 20;
+constexpr std::size_t n = 128;
 
 //#define MTK_DEBUG_PRINT
 
@@ -36,6 +38,8 @@ void test_accuracy(const std::size_t m, const std::size_t n, const unsigned test
 
 	double orthogonality = 0.;
 	double residual = 0.;
+
+	auto cuda_stream_uptr = cutf::stream::get_stream_unique_ptr();
 
 	for (unsigned c = 0; c < test_count; c++) {
 		// initialize input matrix
@@ -93,6 +97,78 @@ void test_accuracy(const std::size_t m, const std::size_t n, const unsigned test
 	std::fflush(stdout);
 }
 
+template <class T>
+void test_accuracy_cusolver(const std::size_t m, const std::size_t n, const unsigned test_count) {
+	auto hA_uptr = cutf::memory::get_host_unique_ptr<T>(m * n);
+#ifdef MTK_DEBUG_PRINT
+	auto hQ_uptr = cutf::memory::get_host_unique_ptr<T>(m * n);
+	auto hR_uptr = cutf::memory::get_host_unique_ptr<T>(n * n);
+#endif
+
+	auto dA_uptr = cutf::memory::get_device_unique_ptr<T>(m * n);
+	auto dQ_uptr = cutf::memory::get_device_unique_ptr<T>(m * n);
+	auto dR_uptr = cutf::memory::get_device_unique_ptr<T>(n * n);
+
+	double orthogonality = 0.;
+	double residual = 0.;
+
+	auto cusolver_handle = cutf::cusolver::get_cusolver_dn_unique_ptr();
+
+	for (unsigned c = 0; c < test_count; c++) {
+		// initialize input matrix
+		{
+			std::mt19937 mt(std::random_device{}());
+			std::uniform_real_distribution<float> dist(-rand_abs_max, rand_abs_max);
+			for (unsigned i = 0; i < m * n; i++) {
+				hA_uptr.get()[i] = cutf::type::cast<T>(dist(mt));
+			}
+		}
+#ifdef MTK_DEBUG_PRINT
+		cutf::debug::print::print_numpy_matrix(hA_uptr.get(), m, n, "Input_A");
+#endif
+
+		cutf::memory::copy(dA_uptr.get(), hA_uptr.get(), m * n);
+
+		mtk::tsqr_tc::test_utils::qr_cublas(
+				dQ_uptr.get(), m,
+				dR_uptr.get(), n,
+				dA_uptr.get(), m,
+				m, n,
+				*cusolver_handle.get()
+				);
+		CUTF_CHECK_ERROR(cudaDeviceSynchronize());
+
+		auto cublas_handle = cutf::cublas::get_cublas_unique_ptr();
+
+		const auto o = mtk::tsqr_tc::test_utils::compute_orthogonality_in_dp(
+				dQ_uptr.get(), m,
+				m, n,
+				*cublas_handle.get()
+				);
+		const auto r = mtk::tsqr_tc::test_utils::compute_residual_in_dp(
+				dQ_uptr.get(), m,
+				dR_uptr.get(), n,
+				dA_uptr.get(), m,
+				m, n,
+				*cublas_handle.get()
+				);
+		residual += r;
+		orthogonality += o;
+#ifdef MTK_DEBUG_PRINT
+		cutf::memory::copy(hR_uptr.get(), dR_uptr.get(), n * n);
+		cutf::memory::copy(hQ_uptr.get(), dQ_uptr.get(), m * n);
+		cutf::debug::print::print_numpy_matrix(hR_uptr.get(), n, n, "Output_R");
+		cutf::debug::print::print_numpy_matrix(hQ_uptr.get(), m, n, "Outout_Q");
+#endif
+	}
+
+	residual /= test_count;
+	orthogonality /= test_count;
+
+	std::printf("%lu,%lu,cusolver,%e,%e\n", m, n, residual, orthogonality);
+	std::fflush(stdout);
+}
+
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
 void test_performance(const std::size_t m, const std::size_t n, const unsigned test_count) {
 	using compute_t = typename mtk::tsqr_tc::detail::get_type<compute_mode>::type;
@@ -140,16 +216,21 @@ void test_performance(const std::size_t m, const std::size_t n, const unsigned t
 }
 
 int main() {
+	std::printf("m,n,mode,residual,orthogonality\n");
+	for (std::size_t lm = 10; lm < max_m_log; lm++) {
+		test_accuracy<mtk::tsqr_tc::compute_mode::fp32_hmma_cor>(1lu << lm, n, test_count);
+	}
+
+	for (std::size_t lm = 10; lm < max_m_log; lm++) {
+		test_accuracy_cusolver<float>(1lu << lm, n, test_count);
+	}
+
 	std::printf("m,n,mode,time,buffer_size\n");
-	for (std::size_t lm = 10; lm < 20; lm++) {
-		test_accuracy<mtk::tsqr_tc::compute_mode::fp32_hmma_cor>(1lu << lm, 128, test_count);
+	for (std::size_t lm = 10; lm < max_m_log; lm++) {
+		test_performance<mtk::tsqr_tc::compute_mode::fp32_hmma_cor>(1lu << lm, n, test_count);
 	}
 
-	for (std::size_t lm = 10; lm < 20; lm++) {
-		test_performance<mtk::tsqr_tc::compute_mode::fp32_hmma_cor>(1lu << lm, 128, test_count);
-	}
-
-	for (std::size_t lm = 10; lm < 20; lm++) {
-		mtk::tsqr_tc::test_utils::test_performance_cublas<float>(1lu << lm, 128, test_count);
+	for (std::size_t lm = 10; lm < max_m_log; lm++) {
+		mtk::tsqr_tc::test_utils::test_performance_cusolver<float>(1lu << lm, n, test_count);
 	}
 }
