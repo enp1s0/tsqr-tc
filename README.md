@@ -10,7 +10,7 @@ The function compute a QR factorization of a m x n matrix (n <= 128).
 This library does not support Turing architecture because it does not have enough shared memory.
 
 ## Requirements
-- C++ >= 17
+- C++ >= 17 (This library uses `if constexpr`)
 - CUDA >= 11.2
 
 ## Supported computation mode
@@ -61,8 +61,7 @@ int main() {
 
 ## Algorithm
 This library computes TSQR using a batch QR function.
-We use Householder QR to compute each QR factorization in batch QR.
-To compute QR factorization efficiently we use WY representation.
+It uses Householder QR and WY Representation to compute each QR factorization in batch QR.
 
 
 ## License
