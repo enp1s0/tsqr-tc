@@ -849,8 +849,8 @@ __global__ void qr256x128_batched_kernel(
 		const std::size_t batch_size,
 		const std::size_t* const start_m_list) {
 	const auto matrix_id = blockIdx.x;
-	const auto start_m = start_m_list[matrix_id];
-	const auto end_m = start_m_list[matrix_id + 1];
+	const auto start_m = (start_m_list == nullptr) ? (matrix_id * 2 * n)       : start_m_list[matrix_id];
+	const auto end_m   = (start_m_list == nullptr) ? ((matrix_id + 1) * 2 * n) : start_m_list[matrix_id + 1];
 	const auto m = end_m - start_m;
 	qr_kernel<compute_mode>(
 			gmem_w_ptr + start_m, ldw,
