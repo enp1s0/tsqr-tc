@@ -442,12 +442,8 @@ void mtk::tsqr_tc::tsqr(
 	MTK_DEBUG_PRINT_DEVICE_MATRIX(a_ptr, m, n, ld_A, "A(Input)");
 	MTK_DEBUG_CALL_HOST_FUNC(std::printf("Split count : %lu\n", buffer.get_split_count()));
 	MTK_DEBUG_CALL_HOST_FUNC(std::printf("=======PREPERATION==\n"));
-	for (std::size_t i = 0; i < buffer.get_split_count() + 1; i++) {
-		buffer.get_index_buffer_host_ptr()[i] = i * m / buffer.get_split_count();
-	}
 
 	MTK_DEBUG_CALL_HOST_FUNC([&](){std::printf("m_list = [");for (std::size_t i = 0; i < buffer.get_split_count() + 1; i++) {std::printf("%lu ", buffer.get_index_buffer_host_ptr()[i]);}std::printf("]\n");}());
-	cutf::memory::copy_async(buffer.get_index_buffer_ptr(), buffer.get_index_buffer_host_ptr(), buffer.get_index_buffer_count(), cuda_stream);
 
 	unsigned r_ptr_index = 0;
 	typename mtk::tsqr_tc::tsqr_buffer<compute_mode>::buffer_type* r_buffer_list[2];
@@ -473,12 +469,6 @@ void mtk::tsqr_tc::tsqr(
 	wy_ptr_offset += m * n;
 	r_ptr_index = 1 - r_ptr_index;
 
-	CUTF_CHECK_ERROR(cudaStreamSynchronize(cuda_stream));
-	for (std::size_t i = 0; i < buffer.get_split_count() + 1; i++) {
-		buffer.get_index_buffer_host_ptr()[i] = i * (2 * n);
-	}
-	cutf::memory::copy_async(buffer.get_index_buffer_ptr(), buffer.get_index_buffer_host_ptr(), buffer.get_index_buffer_count(), cuda_stream);
-
 	for (std::size_t s = buffer.get_split_count() >> 1; s > 1; s >>= 1) {
 		MTK_DEBUG_CALL_HOST_FUNC(std::printf("BQR (s=%3lu) [wy_offset = %10lu, r_ptr_flipflop = %u]\n", s, wy_ptr_offset, r_ptr_index));
 		MTK_DEBUG_PRINT_DEVICE_MATRIX(r_buffer_list[1 - r_ptr_index], 2 * n * s, n, 2 * n * s, "Input of BQR");
@@ -489,7 +479,7 @@ void mtk::tsqr_tc::tsqr(
 				r_buffer_list[1 - r_ptr_index], 2 * n * s,
 				n,
 				s,
-				buffer.get_index_buffer_ptr(),
+				nullptr,
 				cuda_stream
 				);
 		MTK_DEBUG_PRINT_DEVICE_MATRIX(r_buffer_list[r_ptr_index], 2 * n * s, n, 2 * n * s, ("Rs(s=" + std::to_string(s) + ", ldr=" + std::to_string(2 * n * s) + ")").c_str());
@@ -526,7 +516,7 @@ void mtk::tsqr_tc::tsqr(
 			buffer.get_r_buffer_ptr(), n,
 			buffer.get_r_buffer_ptr() + n * n,
 			n, 1,
-			buffer.get_index_buffer_ptr(),
+			nullptr,
 			cuda_stream
 			);
 	MTK_DEBUG_CHECK_KERNEL_ERROR;
@@ -542,16 +532,12 @@ void mtk::tsqr_tc::tsqr(
 				buffer.get_w_buffer_ptr() + prev_wy_ptr_offset, (2 * n * s) / 2,
 				buffer.get_r_buffer_ptr(),
 				n, s,
-				buffer.get_index_buffer_ptr(),
+				nullptr,
 				cuda_stream
 				);
 		MTK_DEBUG_CHECK_KERNEL_ERROR;
 		MTK_DEBUG_PRINT_DEVICE_MATRIX(buffer.get_w_buffer_ptr() + wy_ptr_offset, 2 * n * s, n, 2 * n * s, ("Middle Q(s=" + std::to_string(s) + ")").c_str());
 	}
-	for (std::size_t i = 0; i < buffer.get_split_count() + 1; i++) {
-		buffer.get_index_buffer_host_ptr()[i] = i * m / buffer.get_split_count();
-	}
-	cutf::memory::copy_async(buffer.get_index_buffer_ptr(), buffer.get_index_buffer_host_ptr(), buffer.get_index_buffer_count(), cuda_stream);
 	const auto prev_wy_ptr_offset = wy_ptr_offset;
 	wy_ptr_offset -= m * n;
 	const auto s = buffer.get_split_count();
