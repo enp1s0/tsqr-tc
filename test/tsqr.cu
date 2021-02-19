@@ -28,8 +28,11 @@ void test_accuracy(const std::size_t m, const std::size_t n, const unsigned test
 	auto dQ_uptr = cutf::memory::get_device_unique_ptr<compute_t>(m * n);
 	auto dR_uptr = cutf::memory::get_device_unique_ptr<compute_t>(n * n);
 
+	auto cuda_stream_uptr = cutf::stream::get_stream_unique_ptr();
+
 	mtk::tsqr_tc::tsqr_buffer<compute_mode> tsqr_buffer(m, n);
 	tsqr_buffer.allocate();
+	tsqr_buffer.set_indices(*cuda_stream_uptr.get());
 
 	double orthogonality = 0.;
 	double residual = 0.;
@@ -48,8 +51,6 @@ void test_accuracy(const std::size_t m, const std::size_t n, const unsigned test
 #endif
 
 		cutf::memory::copy(dA_uptr.get(), hA_uptr.get(), m * n);
-
-		auto cuda_stream_uptr = cutf::stream::get_stream_unique_ptr();
 
 		mtk::tsqr_tc::tsqr(
 				dQ_uptr.get(), m,
@@ -115,6 +116,8 @@ void test_performance(const std::size_t m, const std::size_t n, const unsigned t
 	cutf::memory::copy(dA_uptr.get(), hA_uptr.get(), m * n);
 
 	auto cuda_stream_uptr = cutf::stream::get_stream_unique_ptr();
+	tsqr_buffer.set_indices(*cuda_stream_uptr.get());
+	CUTF_CHECK_ERROR(cudaDeviceSynchronize());
 
 	const auto start_clock = std::chrono::high_resolution_clock::now();
 	for (unsigned c = 0; c < test_count; c++) {
