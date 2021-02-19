@@ -46,6 +46,7 @@ int main() {
 	// ...
 	mtk::tsqr_tc::tsqr_buffer<compute_mode> tsqr_buffer(m, n);
 	tsqr_buffer.allocate();
+	tsqr_buffer.set_indices();
 
 	mtk::tsqr_tc::tsqr<compute_mode>(
 			dQ, m,
