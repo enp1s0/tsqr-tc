@@ -43,6 +43,14 @@ std::size_t mtk::tsqr_tc::tsqr_buffer<compute_mode>::get_buffer_size() const {
 		+ sizeof(std::size_t) * get_index_buffer_count();
 }
 
+template <mtk::tsqr_tc::compute_mode::type compute_mode>
+void mtk::tsqr_tc::tsqr_buffer<compute_mode>::set_indices(cudaStream_t cuda_stream) {
+	for (std::size_t i = 0; i < this->get_split_count() + 1; i++) {
+		this->get_index_buffer_host_ptr()[i] = i * m / this->get_split_count();
+	}
+	cutf::memory::copy_async(this->get_index_buffer_ptr(), this->get_index_buffer_host_ptr(), this->get_index_buffer_count(), cuda_stream);
+}
+
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
 void mtk::tsqr_tc::tsqr_buffer<compute_mode>::allocate() {

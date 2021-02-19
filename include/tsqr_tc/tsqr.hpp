@@ -22,6 +22,8 @@ public:
 	void allocate();
 	void free();
 
+	void set_indices(cudaStream_t cuda_stream);
+
 	buffer_type* get_r_buffer_ptr() const {return r_buffer_ptr;}
 	buffer_type* get_w_buffer_ptr() const {return w_buffer_ptr;}
 	buffer_type* get_y_buffer_ptr() const {return y_buffer_ptr;}
