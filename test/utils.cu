@@ -1,6 +1,10 @@
+#include <iostream>
+#include <chrono>
+#include <random>
 #include "utils.hpp"
 #include <cutf/memory.hpp>
 #include <cutf/type.hpp>
+#include <cutf/cusolver.hpp>
 
 namespace {
 template <class DST_T, class SRC_T>
@@ -51,10 +55,11 @@ double mtk::tsqr_tc::test_utils::compute_residual_in_dp(
 	convert_matrix(hW_dp_uptr.get(), m, dW_ptr, ld_W, m, n);
 	convert_matrix(hY_dp_uptr.get(), n, dY_ptr, ld_Y, n, n);
 	convert_matrix(hA_dp_uptr.get(), m, dA_ptr, ld_A, m, n);
+	CUTF_CHECK_ERROR(cudaDeviceSynchronize());
 
 	const auto one = 1.0;
 	const auto m_one = -1.0;
-	const auto zero = 1.0;
+	const auto zero = 0.0;
 	CUTF_CHECK_ERROR(
 			cutf::cublas::gemm(
 				cublas_handle,
@@ -99,6 +104,69 @@ double mtk::tsqr_tc::test_utils::compute_residual_in_dp(
 template
 double mtk::tsqr_tc::test_utils::compute_residual_in_dp<float>(
 		const float* const, const std::size_t,
+		const float* const, const std::size_t,
+		const float* const, const std::size_t,
+		const float* const, const std::size_t,
+		const std::size_t, const std::size_t,
+		cublasHandle_t const
+		);
+
+
+template <class T>
+double mtk::tsqr_tc::test_utils::compute_residual_in_dp(
+		const T* const dQ_ptr, const std::size_t ld_Q,
+		const T* const dR_ptr, const std::size_t ld_R,
+		const T* const dA_ptr, const std::size_t ld_A,
+		const std::size_t m, const std::size_t n,
+		cublasHandle_t const cublas_handle
+		) {
+	auto hR_dp_uptr = cutf::memory::get_host_unique_ptr<double>(n * n);
+	auto hQ_dp_uptr = cutf::memory::get_host_unique_ptr<double>(m * n);
+	auto hA_dp_uptr = cutf::memory::get_host_unique_ptr<double>(m * n);
+	convert_matrix(hR_dp_uptr.get(), n, dR_ptr, ld_R, n, n);
+	convert_matrix(hQ_dp_uptr.get(), m, dQ_ptr, ld_Q, m, n);
+	convert_matrix(hA_dp_uptr.get(), m, dA_ptr, ld_A, m, n);
+	CUTF_CHECK_ERROR(cudaDeviceSynchronize());
+
+	double base_norm = 0.0;
+#pragma omp parallel for reduction(+: base_norm)
+	for (std::size_t i = 0; i < m * n; i++) {
+		const auto base = hA_dp_uptr.get()[i];
+
+		base_norm += base * base;
+	}
+	CUTF_CHECK_ERROR(cudaDeviceSynchronize());
+
+	const auto one = 1.0;
+	const auto m_one = -1.0;
+	CUTF_CHECK_ERROR(
+			cutf::cublas::gemm(
+				cublas_handle,
+				CUBLAS_OP_N, CUBLAS_OP_N,
+				m, n, n,
+				&one,
+				hQ_dp_uptr.get(), m,
+				hR_dp_uptr.get(), n,
+				&m_one,
+				hA_dp_uptr.get(), m
+				)
+			);
+	CUTF_CHECK_ERROR(cudaDeviceSynchronize());
+
+	// compute_diff
+	double diff_norm = 0.0;
+#pragma omp parallel for reduction(+: diff_norm)
+	for (std::size_t i = 0; i < m * n; i++) {
+		const auto diff = hA_dp_uptr.get()[i];
+
+		diff_norm += diff * diff;
+	}
+
+	return std::sqrt(diff_norm / base_norm);
+}
+
+template
+double mtk::tsqr_tc::test_utils::compute_residual_in_dp<float>(
 		const float* const, const std::size_t,
 		const float* const, const std::size_t,
 		const float* const, const std::size_t,
@@ -179,6 +247,59 @@ double mtk::tsqr_tc::test_utils::compute_orthogonality_in_dp(
 template
 double mtk::tsqr_tc::test_utils::compute_orthogonality_in_dp<float>(
 		const float* const, const std::size_t,
+		const float* const, const std::size_t,
+		const std::size_t, const std::size_t,
+		cublasHandle_t const
+		);
+
+
+template <class T>
+double mtk::tsqr_tc::test_utils::compute_orthogonality_in_dp(
+		const T* const dQ_ptr, const std::size_t ld_Q,
+		const std::size_t m, const std::size_t n,
+		cublasHandle_t const cublas_handle
+		) {
+	auto hQ_dp_uptr = cutf::memory::get_host_unique_ptr<double>(m * n);
+	auto hE_dp_uptr = cutf::memory::get_host_unique_ptr<double>(n * n);
+	convert_matrix(hQ_dp_uptr.get(), m, dQ_ptr, ld_Q, m, n);
+
+	// initialize E
+#pragma omp parallel for
+	for (std::size_t i = 0; i < n * n; i++) {
+		hE_dp_uptr.get()[i] = 0.0;
+	}
+	for (std::size_t i = 0; i < n; i++) {
+		hE_dp_uptr.get()[i * (1 + n)] = 1.0;
+	}
+
+	const auto one = 1.0;
+	const auto m_one = -1.0;
+	CUTF_CHECK_ERROR(
+			cutf::cublas::gemm(
+				cublas_handle,
+				CUBLAS_OP_T, CUBLAS_OP_N,
+				n, n, m,
+				&m_one,
+				hQ_dp_uptr.get(), m,
+				hQ_dp_uptr.get(), m,
+				&one,
+				hE_dp_uptr.get(), n
+				)
+			);
+	CUTF_CHECK_ERROR(cudaDeviceSynchronize());
+
+	double diff_norm = 0.0;
+#pragma omp parallel for reduction(+: diff_norm)
+	for (std::size_t i = 0; i < n * n; i++) {
+		const auto diff = hE_dp_uptr.get()[i];
+		diff_norm += diff * diff;
+	}
+
+	return std::sqrt(diff_norm / n);
+}
+
+template
+double mtk::tsqr_tc::test_utils::compute_orthogonality_in_dp<float>(
 		const float* const, const std::size_t,
 		const std::size_t, const std::size_t,
 		cublasHandle_t const
@@ -270,3 +391,71 @@ void mtk::tsqr_tc::test_utils::qr_cublas<float>(
 		const std::size_t m, const std::size_t n,
 		cusolverDnHandle_t const cusolver_handle
 		);
+
+
+template <class T>
+void mtk::tsqr_tc::test_utils::test_performance_cusolver(const std::size_t m, const std::size_t n, const unsigned test_count) {
+	auto cusolver_handle = cutf::cusolver::get_cusolver_dn_unique_ptr();
+	auto hA_uptr = cutf::memory::get_host_unique_ptr<T>(m * n);
+
+	auto dA_uptr = cutf::memory::get_device_unique_ptr<T>(m * n);
+	auto dQ_uptr = cutf::memory::get_device_unique_ptr<T>(m * n);
+	auto dR_uptr = cutf::memory::get_device_unique_ptr<T>(n * n);
+
+	auto d_tau = cutf::memory::get_device_unique_ptr<T>(n * n);
+	int geqrf_working_memory_size, gqr_working_memory_size;
+	CUTF_CHECK_ERROR(cutf::cusolver::dn::geqrf_buffer_size(
+				*cusolver_handle.get(), m, n,
+				dQ_uptr.get(), m, &geqrf_working_memory_size
+				));
+	CUTF_CHECK_ERROR(cutf::cusolver::dn::gqr_buffer_size(
+				*cusolver_handle.get(), m, n, n,
+				dQ_uptr.get(), m, d_tau.get(), &gqr_working_memory_size
+				));
+
+	auto d_geqrf_working_memory = cutf::memory::get_device_unique_ptr<T>(geqrf_working_memory_size);
+	auto d_gqr_working_memory = cutf::memory::get_device_unique_ptr<T>(gqr_working_memory_size);
+	auto d_info = cutf::memory::get_device_unique_ptr<int>(1);
+
+	// initialize input matrix
+	{
+		std::mt19937 mt(std::random_device{}());
+		std::uniform_real_distribution<T> dist(-1., 1.);
+		for (unsigned i = 0; i < m * n; i++) {
+			hA_uptr.get()[i] = cutf::type::cast<T>(dist(mt));
+		}
+	}
+	cutf::memory::copy(dA_uptr.get(), hA_uptr.get(), m * n);
+
+	const auto start_clock = std::chrono::high_resolution_clock::now();
+	for (unsigned c = 0; c < test_count; c++) {
+
+		CUTF_CHECK_ERROR(cutf::cusolver::dn::geqrf(
+					*cusolver_handle.get(), m, n,
+					dQ_uptr.get(), m, d_tau.get(), d_geqrf_working_memory.get(),
+					geqrf_working_memory_size, d_info.get()
+					));
+		cut_r(
+				dR_uptr.get(), n,
+				dQ_uptr.get(), m,
+				n
+			 );
+
+		CUTF_CHECK_ERROR(cutf::cusolver::dn::gqr(
+					*cusolver_handle.get(), m, n, n,
+					dQ_uptr.get(), m,
+					d_tau.get(), d_gqr_working_memory.get(), gqr_working_memory_size,
+					d_info.get()
+					));
+	}
+	CUTF_CHECK_ERROR(cudaDeviceSynchronize());
+	const auto end_clock = std::chrono::high_resolution_clock::now();
+
+	const double elapsed_time = std::chrono::duration_cast<std::chrono::microseconds>(end_clock - start_clock).count() * 1e-6 / test_count;
+
+	std::printf("%lu,%lu,cusolver,%e,%d\n", m, n, elapsed_time, std::max(geqrf_working_memory_size, gqr_working_memory_size) * sizeof(T));
+	std::fflush(stdout);
+}
+
+template
+void mtk::tsqr_tc::test_utils::test_performance_cusolver<float >(const std::size_t, const std::size_t, const unsigned);
