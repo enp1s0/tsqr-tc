@@ -379,6 +379,9 @@ __device__ void compute_base_w_fp32_hmma_cor(
 
 			mtk::tsqr_tc::utils::copy_matrix_g2s<smem_m, smem_n, smem_ldm>(smem_workspace_large_1_ptr, gmem_Y_ptr + bn * ldY, ldY, m, smem_n);
 
+			mtk::wmma::fill_zero(frag_tmp);
+			mtk::wmma::fill_zero(frag_d_tmp);
+
 			// Load Yt
 			mtk::wmma::foreach<decltype(frag_Yt[0])>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
 						const auto offset = (mem_index / smem_n) * smem_ldm;
@@ -395,9 +398,6 @@ __device__ void compute_base_w_fp32_hmma_cor(
 							}
 						}
 					});
-
-			mtk::wmma::fill_zero(frag_tmp);
-			mtk::wmma::fill_zero(frag_d_tmp);
 			for (unsigned k = 0; k < num_col_block; k++) {
 				// Compute (Yt * y)
 				nvcuda::wmma::mma_sync(frag_tmp  , frag_Yt[k]  , frag_Yb[k], frag_tmp  );
@@ -406,7 +406,7 @@ __device__ void compute_base_w_fp32_hmma_cor(
 			}
 
 			for (unsigned i = 0; i < frag_tmp.num_elements; i++) {
-				frag_tmp.x[i] += frag_d_tmp.x[i] / cor_scale;
+				frag_tmp.x[i] = -(frag_tmp.x[i] + frag_d_tmp.x[i] / cor_scale);
 			}
 
 			// Store
@@ -414,14 +414,9 @@ __device__ void compute_base_w_fp32_hmma_cor(
 
 			// Accumulate
 			__syncthreads();
-			mtk::tsqr_tc::utils::accumulate_vectors<smem_m>(smem_workspace_small_ptr, smem_n * smem_n);
+			mtk::tsqr_tc::utils::accumulate_vectors<smem_m>(smem_workspace_large_2_ptr + bn * smem_n, smem_workspace_small_ptr, smem_n * smem_n);
 			MTK_DEBUG_CALL_FUNC(printf("base YtY (%lu/%lu)\n", bn + 1, n));
-			MTK_DEBUG_PRINT_MATRIX(smem_workspace_small_ptr, smem_n, smem_n, smem_n, "");
-
-			// Save
-			//if (threadIdx.x < smem_n * smem_n) {
-			smem_workspace_large_2_ptr[bn * smem_n + threadIdx.x] = -smem_workspace_small_ptr[threadIdx.x];
-			//}
+			MTK_DEBUG_PRINT_MATRIX(smem_workspace_large_2_ptr + bn * smem_n, smem_n, smem_n, smem_n, "");
 		}
 	}
 
@@ -601,7 +596,7 @@ __device__ void update_a_fp32_hmma_cor(
 			}
 
 			for (unsigned i = 0; i < frag_tmp.num_elements; i++) {
-				frag_tmp.x[i] += frag_d_tmp.x[i] / cor_scale;
+				frag_tmp.x[i] = -(frag_tmp.x[i] + frag_d_tmp.x[i] / cor_scale);
 			}
 
 			// Store
@@ -609,14 +604,9 @@ __device__ void update_a_fp32_hmma_cor(
 
 			// Accumulate
 			__syncthreads();
-			mtk::tsqr_tc::utils::accumulate_vectors<smem_m>(smem_workspace_small_ptr, smem_n * smem_n);
+			mtk::tsqr_tc::utils::accumulate_vectors<smem_m>(smem_workspace_large_2_ptr + bn * smem_n, smem_workspace_small_ptr, smem_n * smem_n);
 			MTK_DEBUG_CALL_FUNC(printf("WtA (%lu/%lu)\n", bn + 1, n));
-			MTK_DEBUG_PRINT_MATRIX(smem_workspace_small_ptr, smem_n, smem_n, smem_n, "");
-
-			// Save
-			//if (threadIdx.x < smem_n * smem_n) {
-			smem_workspace_large_2_ptr[bn * smem_n + threadIdx.x] = -smem_workspace_small_ptr[threadIdx.x];
-			//}
+			MTK_DEBUG_PRINT_MATRIX(smem_workspace_large_2_ptr + bn * smem_n, smem_n, smem_n, smem_n, "");
 		}
 	}
 
