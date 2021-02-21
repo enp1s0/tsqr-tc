@@ -192,7 +192,6 @@ __device__ void compute_reflection_1_fp32_hmma_cor(
 	auto A_ptr = smem_A_ptr + (threadIdx.x & 0xffffffe0u);
 	for (unsigned i = 0; i < num_col_block; i++) {
 		nvcuda::wmma::fragment<nvcuda::wmma::accumulator, smem_n, smem_n, smem_n, float> frag_A, frag_d_A;
-		mtk::wmma::fill_zero(frag_d_A);
 
 		auto y_ptr = smem_y_ptr + (threadIdx.x & 0xffffffe0u) + i * smem_n;
 		mtk::wmma::foreach_v<decltype(frag_y)>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
@@ -210,6 +209,7 @@ __device__ void compute_reflection_1_fp32_hmma_cor(
 
 		nvcuda::wmma::mma_sync(frag_d_A, frag_d_y, frag_tmp, frag_d_A);
 		nvcuda::wmma::mma_sync(frag_d_A, frag_y, frag_d_tmp, frag_d_A);
+		mtk::wmma::fill_zero(frag_d_A);
 		nvcuda::wmma::mma_sync(frag_A, frag_y, frag_tmp, frag_A);
 
 		for (unsigned k = 0; k < frag_A.num_elements; k++) {
