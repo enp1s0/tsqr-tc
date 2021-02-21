@@ -301,7 +301,7 @@ __device__ void compute_w_fp32_hmma_cor(
 		for (unsigned i = 0; i < frag_YtY.num_elements; i++) {
 			frag_YtY.x[i] += frag_d_YtY.x[i] / cor_scale;
 		}
-		nvcuda::wmma::store_matrix_sync(smem_reduction_ptr + cutf::thread::get_warp_id() * smem_n * smem_n, frag_YtY, smem_n, nvcuda::wmma::mem_col_major);
+		nvcuda::wmma::store_matrix_sync(smem_reduction_ptr + (threadIdx.x / warp_size) * smem_n * smem_n, frag_YtY, smem_n, nvcuda::wmma::mem_col_major);
 	}
 
 	// Accumulate
@@ -425,7 +425,7 @@ __device__ void compute_base_w_fp32_hmma_cor(
 			}
 
 			// Store
-			nvcuda::wmma::store_matrix_sync(smem_workspace_small_ptr + cutf::thread::get_warp_id() * smem_n * smem_n, frag_tmp, smem_n, nvcuda::wmma::mem_col_major);
+			nvcuda::wmma::store_matrix_sync(smem_workspace_small_ptr + (threadIdx.x / warp_size) * smem_n * smem_n, frag_tmp, smem_n, nvcuda::wmma::mem_col_major);
 
 			// Accumulate
 			__syncthreads();
@@ -620,7 +620,7 @@ __device__ void update_a_fp32_hmma_cor(
 			}
 
 			// Store
-			nvcuda::wmma::store_matrix_sync(smem_workspace_small_ptr + cutf::thread::get_warp_id() * smem_n * smem_n, frag_tmp, smem_n, nvcuda::wmma::mem_col_major);
+			nvcuda::wmma::store_matrix_sync(smem_workspace_small_ptr + (threadIdx.x / warp_size) * smem_n * smem_n, frag_tmp, smem_n, nvcuda::wmma::mem_col_major);
 
 			// Accumulate
 			__syncthreads();
@@ -778,7 +778,7 @@ __device__ void qr_kernel(
 			MTK_DEBUG_PRINT_MATRIX(smem_y_ptr, 1, m, 1, "y (loaded)");
 
 			// Compute norm2 of y and update y (y_i <- y_i +- norm(y);
-			if (cutf::thread::get_warp_id() == gn / warp_size) {
+			if ((threadIdx.x / warp_size) == gn / warp_size) {
 				const auto norm2 = cutf::type::cast<T>(compute_norm2<float>(smem_y_ptr, DIM_MAX_M));
 				if (cutf::thread::get_lane_id() == sn) {
 					const auto norm = cutf::math::sqrt(norm2);
