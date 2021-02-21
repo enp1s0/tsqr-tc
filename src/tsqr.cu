@@ -365,6 +365,9 @@ __global__ void tsqr_backward_kernel(
 	auto g_IN_Q_ptr = gmem_IN_Q_ptr + matrix_id * n;
 	auto working_memory_ptr = gmem_WORKING_ptr + matrix_id * n * n;
 
+	MTK_CLOCK_BREAKDOWN_INIT(3);
+
+	MTK_CLOCK_BREAKDOWN_RECORD(0);
 	gemm_MxNxN_core<compute_mode, 0, 1, 0>(
 			working_memory_ptr, n,
 			g_Y_ptr, ld_Y,
@@ -372,6 +375,7 @@ __global__ void tsqr_backward_kernel(
 			nullptr, 0,
 			n, n
 			);
+	MTK_CLOCK_BREAKDOWN_RECORD(1);
 	__syncthreads();
 	gemm_MxNxN_core<compute_mode, 1, 0, 1>(
 			g_OUT_Q_ptr, ld_OUT_Q,
@@ -380,6 +384,15 @@ __global__ void tsqr_backward_kernel(
 			g_IN_Q_ptr, ld_IN_Q,
 			m, n
 			);
+	MTK_CLOCK_BREAKDOWN_RECORD(2);
+#ifdef MTK_CLOCK_BREAKDOWN
+	if (threadIdx.x + blockIdx.x == 0) {
+		printf("batch_size,n,gemm1,gemm2\n");
+		printf("%u,%lu,%lld,%lld\n", blockDim.x, n,
+				MTK_CLOCK_BREAKDOWN_DURATION(0, 1),
+				MTK_CLOCK_BREAKDOWN_DURATION(1, 2));
+	}
+#endif
 }
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
