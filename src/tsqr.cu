@@ -7,6 +7,8 @@
 
 //#define MTK_DEBUG_DEVICE
 //#define MTK_DEBUG_HOST
+//#define MTK_CLOCK_BREAKDOWN
+
 #ifdef MTK_DEBUG_DEVICE
 #include <cutf/debug/matrix.hpp>
 #include <type_traits>
@@ -41,6 +43,17 @@
 #define MTK_DEBUG_PRINT_DEVICE_MATRIX(ptr, m, n, ldm, name)
 #define MTK_DEBUG_CALL_HOST_FUNC(func)
 #define MTK_DEBUG_CHECK_KERNEL_ERROR
+#endif
+
+#ifdef MTK_CLOCK_BREAKDOWN
+#include <cutf/debug/clock_breakdown.hpp>
+#define MTK_CLOCK_BREAKDOWN_INIT(n) CUTF_CLOCK_BREAKDOWN_INIT(n)
+#define MTK_CLOCK_BREAKDOWN_RECORD(n) CUTF_CLOCK_BREAKDOWN_RECORD(n)
+#define MTK_CLOCK_BREAKDOWN_DURATION(m, n) CUTF_CLOCK_BREAKDOWN_DURATION(m, n)
+#else
+#define MTK_CLOCK_BREAKDOWN_INIT(n)
+#define MTK_CLOCK_BREAKDOWN_RECORD(n)
+#define MTK_CLOCK_BREAKDOWN_DURATION(m, n)
 #endif
 
 namespace {
