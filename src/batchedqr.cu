@@ -172,16 +172,11 @@ __device__ void compute_reflection_1_fp32_hmma_cor(
 	constexpr unsigned num_col_block = warp_size / smem_n;
 	constexpr float cor_scale = 1024.0f;
 
-	if (threadIdx.x < smem_n) {
-		smem_reduction_ptr[threadIdx.x] *= -t;
-	}
-
 	nvcuda::wmma::fragment<nvcuda::wmma::matrix_b, smem_n, smem_n, smem_n, half, nvcuda::wmma::row_major> frag_tmp, frag_d_tmp;
 	mtk::wmma::fill_zero(frag_tmp);
 	mtk::wmma::fill_zero(frag_d_tmp);
-	__syncthreads();
 	mtk::wmma::foreach_v<decltype(frag_tmp)>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
-				const auto v = smem_reduction_ptr[mem_index];
+				const auto v = smem_reduction_ptr[mem_index] * (-t);
 				const auto hv = cutf::type::cast<half>(v);
 				const auto dhv = cutf::type::cast<half>((v - cutf::type::cast<float>(hv)) * cor_scale);
 				for (unsigned k = 0; k < frag_index_count; k++) {
