@@ -32,6 +32,29 @@ __device__ inline void accumulate_vectors(T* const smem_vec_ptr, const unsigned 
 	}
 	__syncthreads();
 }
+
+template <unsigned block_size, class T>
+__device__ inline void accumulate_vectors(T* const dst_smem_vec_ptr, const T* const smem_vec_ptr, const unsigned vec_len) {
+	constexpr unsigned warp_size = 32;
+	if (vec_len <= block_size) {
+		if (threadIdx.x < vec_len) {
+			auto v = cutf::type::cast<T>(0.0f);
+			for (unsigned i = 0; i < block_size / warp_size; i++) {
+				v += smem_vec_ptr[i * vec_len + threadIdx.x];
+			}
+			dst_smem_vec_ptr[threadIdx.x] = v;
+		}
+	} else {
+		for (unsigned j = 0; j < vec_len; j += block_size) {
+			auto v = cutf::type::cast<T>(0.0f);
+			for (unsigned i = 0; i < block_size / warp_size; i++) {
+				v += smem_vec_ptr[j + i * vec_len + threadIdx.x];
+			}
+			dst_smem_vec_ptr[j + threadIdx.x] = v;
+		}
+	}
+	__syncthreads();
+}
 // This function copies matrix data from global memory to shared memory
 // Ristrictions:
 // - smem_m == block_size
