@@ -192,7 +192,6 @@ __device__ void compute_reflection_1_fp32_hmma_cor(
 
 	for (unsigned i = 0; i < num_col_block; i++) {
 		nvcuda::wmma::fragment<nvcuda::wmma::accumulator, smem_n, smem_n, smem_n, float> frag_A, frag_d_A;
-		mtk::wmma::fill_zero(frag_d_A);
 
 		auto y_ptr = smem_y_ptr + (threadIdx.x & 0xffffffe0u) + i * smem_n;
 		mtk::wmma::foreach_v<decltype(frag_y)>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
@@ -209,6 +208,7 @@ __device__ void compute_reflection_1_fp32_hmma_cor(
 		auto A_ptr = smem_A_ptr + (threadIdx.x & 0xffffffe0u);
 		nvcuda::wmma::load_matrix_sync(frag_A, A_ptr + i * smem_n, smem_ldm, nvcuda::wmma::mem_col_major);
 
+		mtk::wmma::fill_zero(frag_d_A);
 		nvcuda::wmma::mma_sync(frag_d_A, frag_d_y, frag_tmp, frag_d_A);
 		nvcuda::wmma::mma_sync(frag_d_A, frag_y, frag_d_tmp, frag_d_A);
 		nvcuda::wmma::mma_sync(frag_A, frag_y, frag_tmp, frag_A);
@@ -725,10 +725,6 @@ __device__ void qr_kernel(
 		const std::size_t m,
 		const std::size_t n
 		) {
-#ifdef MTK_CLOCK_BREAKDOWN
-	if (threadIdx.x + blockIdx.x == 0)
-		printf("n_block,local_householder,store,update_w\n");
-#endif
 	using T = typename mtk::tsqr_tc::detail::get_type<compute_mode>::type;
 	constexpr unsigned DIM_MAX_M = 256;
 	constexpr unsigned DIM_BLOCK_N = 16;
@@ -745,9 +741,8 @@ __device__ void qr_kernel(
 
 	const unsigned num_n_blocks = (n + DIM_BLOCK_N - 1) / DIM_BLOCK_N;
 	for (std::size_t n_block = 0; n_block < num_n_blocks; n_block++) {
-		MTK_CLOCK_BREAKDOWN_INIT(4);
+		MTK_CLOCK_BREAKDOWN_INIT(5);
 		MTK_CLOCK_BREAKDOWN_RECORD(0);
-		fill_zero<block_size, DIM_MAX_M * DIM_BLOCK_N>(smem_Y_ptr);
 
 		const unsigned real_block_n = umin(DIM_BLOCK_N, n - DIM_BLOCK_N * n_block);
 		mtk::tsqr_tc::utils::copy_matrix_g2s<block_size, DIM_BLOCK_N, DIM_MAX_M>(smem_A_ptr, gmem_a_ptr + lda * n_block * DIM_BLOCK_N, lda, m, real_block_n);
@@ -763,17 +758,20 @@ __device__ void qr_kernel(
 				real_block_n
 				);
 
+		MTK_CLOCK_BREAKDOWN_RECORD(1);
+
 		for (unsigned sn = 0; sn < real_block_n; sn++) {
 			MTK_DEBUG_CALL_FUNC(printf("----------\n----- small n : %u\n----------\n", sn));
 			MTK_DEBUG_PRINT_MATRIX(smem_A_ptr, m, real_block_n, DIM_MAX_M, "Input A");
 			const auto gn = n_block * DIM_BLOCK_N + sn;
 
 			// Copy y from A
-			smem_y_ptr[threadIdx.x] = cutf::type::cast<T>(0.0f);
+			auto yv = cutf::type::cast<T>(0.0f);
 			if (threadIdx.x >= gn) {
 				const auto index = DIM_MAX_M * sn + threadIdx.x;
-				smem_y_ptr[threadIdx.x] = smem_A_ptr[index];
+				yv = smem_A_ptr[index];
 			}
+			smem_y_ptr[threadIdx.x] = yv;
 			__syncthreads();
 			MTK_DEBUG_PRINT_MATRIX(smem_y_ptr, 1, m, 1, "y (loaded)");
 
@@ -805,13 +803,13 @@ __device__ void qr_kernel(
 				smem_t_ptr[sn] = t;
 			}
 		}
-		MTK_CLOCK_BREAKDOWN_RECORD(1);
+		MTK_CLOCK_BREAKDOWN_RECORD(2);
 		MTK_DEBUG_PRINT_MATRIX(smem_Y_ptr, m, real_block_n, DIM_MAX_M, "Y (Block Result)");
 		MTK_DEBUG_PRINT_MATRIX(smem_t_ptr, 1, real_block_n, 1, "t (Block Result)");
 		// Store block Y and R
 		mtk::tsqr_tc::utils::copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_r_ptr + ldr * n_block * DIM_BLOCK_N, ldr, smem_A_ptr, n, real_block_n);
 		mtk::tsqr_tc::utils::copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_y_ptr + ldy * n_block * DIM_BLOCK_N, ldy, smem_Y_ptr, m, real_block_n);
-		MTK_CLOCK_BREAKDOWN_RECORD(2);
+		MTK_CLOCK_BREAKDOWN_RECORD(3);
 
 		// Compute W
 		__syncthreads();
@@ -836,14 +834,20 @@ __device__ void qr_kernel(
 				);
 		mtk::tsqr_tc::utils::copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_w_ptr + ldw * n_block * DIM_BLOCK_N, ldw, smem_W_ptr, m, real_block_n);
 		MTK_DEBUG_PRINT_MATRIX(smem_W_ptr, m, real_block_n, DIM_MAX_M, "W (Block Result)");
-		MTK_CLOCK_BREAKDOWN_RECORD(3);
+		MTK_CLOCK_BREAKDOWN_RECORD(4);
 #ifdef MTK_CLOCK_BREAKDOWN
-		if (threadIdx.x + blockIdx.x == 0) printf("%lu,%lld,%lld,%lld\n",
+		if (threadIdx.x + blockIdx.x == 0) {
+			if (n_block == 0) {
+				printf("n_block,update_a,local_householder,store,update_w\n");
+			}
+			printf("%lu,%lld,%lld,%lld,%lld\n",
 				n_block,
 				MTK_CLOCK_BREAKDOWN_DURATION(0, 1),
 				MTK_CLOCK_BREAKDOWN_DURATION(1, 2),
-				MTK_CLOCK_BREAKDOWN_DURATION(2, 3)
+				MTK_CLOCK_BREAKDOWN_DURATION(2, 3),
+				MTK_CLOCK_BREAKDOWN_DURATION(3, 4)
 				);
+		}
 #endif
 	}
 }
