@@ -647,9 +647,11 @@ __device__ void update_a_fp32_hmma_cor(
 
 	for (unsigned k = 0; k < num_col_block; k++) {
 		nvcuda::wmma::load_matrix_sync(frag_A[k], smem_workspace_large_0_ptr + (threadIdx.x & 0xffffffe0u) + k * smem_n, smem_ldm, nvcuda::wmma::mem_col_major);
-		mtk::wmma::fill_zero(frag_d_A[k]);
 		// Compute (Y * WtA)
 		nvcuda::wmma::mma_sync(frag_A[k]  , frag_Y[k]  , frag_WtA  , frag_A[k]  );
+	}
+	for (unsigned k = 0; k < num_col_block; k++) {
+		mtk::wmma::fill_zero(frag_d_A[k]);
 		nvcuda::wmma::mma_sync(frag_d_A[k], frag_d_Y[k], frag_WtA  , frag_d_A[k]);
 		nvcuda::wmma::mma_sync(frag_d_A[k], frag_Y[k]  , frag_d_WtA, frag_d_A[k]);
 	}
