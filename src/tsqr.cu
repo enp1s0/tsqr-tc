@@ -7,6 +7,8 @@
 
 //#define MTK_DEBUG_DEVICE
 //#define MTK_DEBUG_HOST
+//#define MTK_CLOCK_BREAKDOWN
+
 #ifdef MTK_DEBUG_DEVICE
 #include <cutf/debug/matrix.hpp>
 #include <type_traits>
@@ -41,6 +43,17 @@
 #define MTK_DEBUG_PRINT_DEVICE_MATRIX(ptr, m, n, ldm, name)
 #define MTK_DEBUG_CALL_HOST_FUNC(func)
 #define MTK_DEBUG_CHECK_KERNEL_ERROR
+#endif
+
+#ifdef MTK_CLOCK_BREAKDOWN
+#include <cutf/debug/clock_breakdown.hpp>
+#define MTK_CLOCK_BREAKDOWN_INIT(n) CUTF_CLOCK_BREAKDOWN_INIT(n)
+#define MTK_CLOCK_BREAKDOWN_RECORD(n) CUTF_CLOCK_BREAKDOWN_RECORD(n)
+#define MTK_CLOCK_BREAKDOWN_DURATION(m, n) CUTF_CLOCK_BREAKDOWN_DURATION(m, n)
+#else
+#define MTK_CLOCK_BREAKDOWN_INIT(n)
+#define MTK_CLOCK_BREAKDOWN_RECORD(n)
+#define MTK_CLOCK_BREAKDOWN_DURATION(m, n)
 #endif
 
 namespace {
@@ -352,6 +365,9 @@ __global__ void tsqr_backward_kernel(
 	auto g_IN_Q_ptr = gmem_IN_Q_ptr + matrix_id * n;
 	auto working_memory_ptr = gmem_WORKING_ptr + matrix_id * n * n;
 
+	MTK_CLOCK_BREAKDOWN_INIT(3);
+
+	MTK_CLOCK_BREAKDOWN_RECORD(0);
 	gemm_MxNxN_core<compute_mode, 0, 1, 0>(
 			working_memory_ptr, n,
 			g_Y_ptr, ld_Y,
@@ -359,6 +375,7 @@ __global__ void tsqr_backward_kernel(
 			nullptr, 0,
 			n, n
 			);
+	MTK_CLOCK_BREAKDOWN_RECORD(1);
 	__syncthreads();
 	gemm_MxNxN_core<compute_mode, 1, 0, 1>(
 			g_OUT_Q_ptr, ld_OUT_Q,
@@ -367,6 +384,15 @@ __global__ void tsqr_backward_kernel(
 			g_IN_Q_ptr, ld_IN_Q,
 			m, n
 			);
+	MTK_CLOCK_BREAKDOWN_RECORD(2);
+#ifdef MTK_CLOCK_BREAKDOWN
+	if (threadIdx.x + blockIdx.x == 0) {
+		printf("batch_size,n,gemm1,gemm2\n");
+		printf("%u,%lu,%lld,%lld\n", blockDim.x, n,
+				MTK_CLOCK_BREAKDOWN_DURATION(0, 1),
+				MTK_CLOCK_BREAKDOWN_DURATION(1, 2));
+	}
+#endif
 }
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode>

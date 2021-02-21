@@ -9,6 +9,8 @@
 #include "utils.hpp"
 
 //#define MTK_DEBUG
+//#define MTK_CLOCK_BREAKDOWN
+
 #ifdef MTK_DEBUG
 #include <cutf/debug/matrix.hpp>
 #define MTK_DEBUG_PRINT_MATRIX(ptr, m, n, ldm, name) \
@@ -22,6 +24,17 @@
 #else
 #define MTK_DEBUG_PRINT_MATRIX(ptr, m, n, ldm, name)
 #define MTK_DEBUG_CALL_FUNC(func)
+#endif
+
+#ifdef MTK_CLOCK_BREAKDOWN
+#include <cutf/debug/clock_breakdown.hpp>
+#define MTK_CLOCK_BREAKDOWN_INIT(n) CUTF_CLOCK_BREAKDOWN_INIT(n)
+#define MTK_CLOCK_BREAKDOWN_RECORD(n) CUTF_CLOCK_BREAKDOWN_RECORD(n)
+#define MTK_CLOCK_BREAKDOWN_DURATION(m, n) CUTF_CLOCK_BREAKDOWN_DURATION(m, n)
+#else
+#define MTK_CLOCK_BREAKDOWN_INIT(n)
+#define MTK_CLOCK_BREAKDOWN_RECORD(n)
+#define MTK_CLOCK_BREAKDOWN_DURATION(m, n)
 #endif
 
 namespace {
@@ -716,6 +729,10 @@ __device__ void qr_kernel(
 		const std::size_t m,
 		const std::size_t n
 		) {
+#ifdef MTK_CLOCK_BREAKDOWN
+	if (threadIdx.x + blockIdx.x == 0)
+		printf("n_block,local_householder,store,update_w\n");
+#endif
 	using T = typename mtk::tsqr_tc::detail::get_type<compute_mode>::type;
 	constexpr unsigned DIM_MAX_M = 256;
 	constexpr unsigned DIM_BLOCK_N = 16;
@@ -732,6 +749,8 @@ __device__ void qr_kernel(
 
 	const unsigned num_n_blocks = (n + DIM_BLOCK_N - 1) / DIM_BLOCK_N;
 	for (std::size_t n_block = 0; n_block < num_n_blocks; n_block++) {
+		MTK_CLOCK_BREAKDOWN_INIT(4);
+		MTK_CLOCK_BREAKDOWN_RECORD(0);
 		fill_zero<block_size, DIM_MAX_M * DIM_BLOCK_N>(smem_Y_ptr);
 
 		const unsigned real_block_n = umin(DIM_BLOCK_N, n - DIM_BLOCK_N * n_block);
@@ -790,11 +809,13 @@ __device__ void qr_kernel(
 				smem_t_ptr[sn] = t;
 			}
 		}
+		MTK_CLOCK_BREAKDOWN_RECORD(1);
 		MTK_DEBUG_PRINT_MATRIX(smem_Y_ptr, m, real_block_n, DIM_MAX_M, "Y (Block Result)");
 		MTK_DEBUG_PRINT_MATRIX(smem_t_ptr, 1, real_block_n, 1, "t (Block Result)");
 		// Store block Y and R
 		mtk::tsqr_tc::utils::copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_r_ptr + ldr * n_block * DIM_BLOCK_N, ldr, smem_A_ptr, n, real_block_n);
 		mtk::tsqr_tc::utils::copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_y_ptr + ldy * n_block * DIM_BLOCK_N, ldy, smem_Y_ptr, m, real_block_n);
+		MTK_CLOCK_BREAKDOWN_RECORD(2);
 
 		// Compute W
 		__syncthreads();
@@ -819,6 +840,15 @@ __device__ void qr_kernel(
 				);
 		mtk::tsqr_tc::utils::copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_w_ptr + ldw * n_block * DIM_BLOCK_N, ldw, smem_W_ptr, m, real_block_n);
 		MTK_DEBUG_PRINT_MATRIX(smem_W_ptr, m, real_block_n, DIM_MAX_M, "W (Block Result)");
+		MTK_CLOCK_BREAKDOWN_RECORD(3);
+#ifdef MTK_CLOCK_BREAKDOWN
+		if (threadIdx.x + blockIdx.x == 0) printf("%lu,%lld,%lld,%lld\n",
+				n_block,
+				MTK_CLOCK_BREAKDOWN_DURATION(0, 1),
+				MTK_CLOCK_BREAKDOWN_DURATION(1, 2),
+				MTK_CLOCK_BREAKDOWN_DURATION(2, 3)
+				);
+#endif
 	}
 }
 
