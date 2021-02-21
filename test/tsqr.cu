@@ -12,6 +12,7 @@
 
 constexpr float rand_abs_max = 1.0f;
 constexpr unsigned test_count = 16;
+constexpr std::size_t min_m_log = 10;
 constexpr std::size_t max_m_log = 20;
 constexpr std::size_t n = 128;
 
@@ -215,20 +216,20 @@ void test_performance(const std::size_t m, const std::size_t n, const unsigned t
 
 int main() {
 	std::printf("m,n,mode,residual,orthogonality\n");
-	for (std::size_t lm = 10; lm < max_m_log; lm++) {
+	for (std::size_t lm = min_m_log; lm < max_m_log; lm++) {
 		test_accuracy<mtk::tsqr_tc::compute_mode::fp32_hmma_cor>(1lu << lm, n, test_count);
 	}
 
-	for (std::size_t lm = 10; lm < max_m_log; lm++) {
+	for (std::size_t lm = min_m_log; lm < max_m_log; lm++) {
 		test_accuracy_cusolver<float>(1lu << lm, n, test_count);
 	}
 
 	std::printf("m,n,mode,time,buffer_size\n");
-	for (std::size_t lm = 10; lm < max_m_log; lm++) {
+	for (std::size_t lm = min_m_log; lm < max_m_log; lm++) {
 		test_performance<mtk::tsqr_tc::compute_mode::fp32_hmma_cor>(1lu << lm, n, test_count);
 	}
 
-	for (std::size_t lm = 10; lm < max_m_log; lm++) {
+	for (std::size_t lm = min_m_log; lm < max_m_log; lm++) {
 		mtk::tsqr_tc::test_utils::test_performance_cusolver<float>(1lu << lm, n, test_count);
 	}
 }
