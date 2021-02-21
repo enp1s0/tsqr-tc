@@ -612,11 +612,49 @@ __device__ void update_a_fp32_hmma_cor(
 
 	// Compute As <- As - Yg * WtA
 	nvcuda::wmma::fragment<nvcuda::wmma::accumulator, smem_n, smem_n, smem_n, float> frag_A[num_col_block], frag_d_A[num_col_block];
+	nvcuda::wmma::fragment<nvcuda::wmma::matrix_b, smem_n, smem_n, smem_n, half, nvcuda::wmma::col_major> frag_WtA, frag_d_WtA;
+	// Load WtA
+	// vvvvvvvvvvvvvvvvvvv Manual unroll vvvvvvvvvvvvvvvvvvv
+	mtk::wmma::foreach<decltype(frag_WtA)>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
+				const auto v = smem_workspace_large_2_ptr[mem_index];
+				const auto hv = cutf::type::cast<half>(v);
+				const auto dhv = cutf::type::cast<half>((v - cutf::type::cast<float>(hv)) * cor_scale);
+				for (unsigned i = 0; i < frag_index_count; i++) {
+				const unsigned frag_index = frag_index_list[i];
+					frag_WtA.x[frag_index] = hv;
+					frag_d_WtA.x[frag_index] = dhv;
+				}
+			});
+
+	mtk::tsqr_tc::utils::copy_matrix_g2s<smem_m, smem_n, smem_ldm>(smem_workspace_large_1_ptr, gmem_Y_ptr, ldY, m, smem_n);
+	nvcuda::wmma::fragment<nvcuda::wmma::matrix_a, smem_n, smem_n, smem_n, half, nvcuda::wmma::col_major> frag_Y[num_col_block], frag_d_Y[num_col_block];
+	// Load W
+	mtk::wmma::foreach<decltype(frag_Y[0])>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
+				const auto offset = (mem_index / smem_n) * smem_ldm;
+				const auto row = mem_index % smem_n + (threadIdx.x & 0xffffffe0u);
+				for (unsigned k = 0; k < num_col_block; k++) {
+					const auto r = row + k * smem_n;
+					const auto v = smem_workspace_large_1_ptr[offset + r];
+					const auto hv = cutf::type::cast<half>(v);
+					const auto dhv = cutf::type::cast<half>((v - cutf::type::cast<float>(hv)) * cor_scale);
+					for (unsigned i = 0; i < frag_index_count; i++) {
+					const unsigned frag_index = frag_index_list[i];
+						frag_Y[k].x[frag_index] = hv;
+						frag_d_Y[k].x[frag_index] = dhv;
+					}
+				}
+			});
+
 	for (unsigned k = 0; k < num_col_block; k++) {
 		nvcuda::wmma::load_matrix_sync(frag_A[k], smem_workspace_large_0_ptr + (threadIdx.x & 0xffffffe0u) + k * smem_n, smem_ldm, nvcuda::wmma::mem_col_major);
 		mtk::wmma::fill_zero(frag_d_A[k]);
+		// Compute (Y * WtA)
+		nvcuda::wmma::mma_sync(frag_A[k]  , frag_Y[k]  , frag_WtA  , frag_A[k]  );
+		nvcuda::wmma::mma_sync(frag_d_A[k], frag_d_Y[k], frag_WtA  , frag_d_A[k]);
+		nvcuda::wmma::mma_sync(frag_d_A[k], frag_Y[k]  , frag_d_WtA, frag_d_A[k]);
 	}
-	for (std::size_t bn = 0; bn < n; bn += smem_n) {
+	// ^^^^^^^^^^^^^^^^^^^ Manual unroll ^^^^^^^^^^^^^^^^^^^
+	for (std::size_t bn = smem_n; bn < n; bn += smem_n) {
 		nvcuda::wmma::fragment<nvcuda::wmma::matrix_b, smem_n, smem_n, smem_n, half, nvcuda::wmma::col_major> frag_WtA, frag_d_WtA;
 		// Load WtA
 		mtk::wmma::foreach<decltype(frag_WtA)>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
