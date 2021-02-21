@@ -1,5 +1,6 @@
 #ifndef __MTK_TSQR_TC_MATRIX_UTILS_HPP__
 #define __MTK_TSQR_TC_MATRIX_UTILS_HPP__
+#include <cutf/type.hpp>
 
 namespace mtk {
 namespace tsqr_tc {
@@ -12,21 +13,30 @@ namespace utils {
 template <unsigned block_size, class T>
 __device__ inline void accumulate_vectors(T* const smem_vec_ptr, const unsigned vec_len) {
 	constexpr unsigned warp_size = 32;
-	for (unsigned whole_vec_len = vec_len * block_size / warp_size; whole_vec_len > vec_len; whole_vec_len >>= 1) {
-		for (unsigned offset = 0; offset < whole_vec_len / 2; offset += block_size) {
-			const auto index = offset + threadIdx.x;
-			if (index > whole_vec_len / 2) break;
-
-			smem_vec_ptr[index] += smem_vec_ptr[index + whole_vec_len / 2];
+	if (vec_len <= block_size) {
+		if (threadIdx.x < vec_len) {
+			auto v = cutf::type::cast<T>(0.0f);
+			for (unsigned i = 0; i < block_size / warp_size; i++) {
+				v += smem_vec_ptr[i * vec_len + threadIdx.x];
+			}
+			smem_vec_ptr[threadIdx.x] = v;
 		}
-		__syncthreads();
+	} else {
+		for (unsigned j = 0; j < vec_len; j += block_size) {
+			auto v = cutf::type::cast<T>(0.0f);
+			for (unsigned i = 0; i < block_size / warp_size; i++) {
+				v += smem_vec_ptr[j + i * vec_len + threadIdx.x];
+			}
+			smem_vec_ptr[j + threadIdx.x] = v;
+		}
 	}
+	__syncthreads();
 }
 // This function copies matrix data from global memory to shared memory
 // Ristrictions:
 // - smem_m == block_size
 template <unsigned block_size, unsigned smem_n, unsigned smem_ld, class SMEM_T, class GMEM_T>
-__device__ inline void copy_matrix_g2s(
+__device__ void copy_matrix_g2s(
 		SMEM_T* const smem,
 		const GMEM_T* const gmem_ptr, const std::size_t gmem_ld,
 		const std::size_t m, const std::size_t n
@@ -59,7 +69,7 @@ __device__ inline void copy_matrix_g2s(
 // Ristrictions:
 // - smem_m == block_size
 template <unsigned block_size, unsigned smem_n, unsigned smem_ld, class SMEM_T, class GMEM_T>
-__device__ inline void copy_matrix_s2g(
+__device__ void copy_matrix_s2g(
 		GMEM_T* const gmem_ptr, const std::size_t gmem_ld,
 		const SMEM_T* const smem,
 		const std::size_t m, const std::size_t n
