@@ -87,9 +87,6 @@ __device__ void compute_reflection_0_fp32_hmma_cor(
 	nvcuda::wmma::fragment<nvcuda::wmma::matrix_a, smem_n, smem_n, smem_n, half, nvcuda::wmma::row_major> frag_yt[num_accumulate], frag_d_yt[num_accumulate];
 	nvcuda::wmma::fragment<nvcuda::wmma::matrix_b, smem_n, smem_n, smem_n, half, nvcuda::wmma::col_major> frag_a[num_accumulate], frag_d_a[num_accumulate];
 	nvcuda::wmma::fragment<nvcuda::wmma::accumulator, smem_n, smem_n, smem_n, float> frag_ytA, frag_d_ytA;
-	mtk::wmma::fill_zero(frag_ytA);
-	mtk::wmma::fill_zero(frag_d_ytA);
-
 	// Load A
 	mtk::wmma::foreach<decltype(frag_a[0])>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
 				const auto offset = (mem_index / smem_n) * smem_ldm;
@@ -120,6 +117,9 @@ __device__ void compute_reflection_0_fp32_hmma_cor(
 					}
 				}
 			});
+
+	mtk::wmma::fill_zero(frag_ytA);
+	mtk::wmma::fill_zero(frag_d_ytA);
 
 	for (unsigned k = 0; k < num_accumulate; k++) {
 		// Compute (y^t * A)
