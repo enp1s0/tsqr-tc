@@ -186,10 +186,10 @@ __device__ void compute_reflection_1_fp32_hmma_cor(
 				}
 			});
 	nvcuda::wmma::fragment<nvcuda::wmma::matrix_a, smem_n, smem_n, smem_n, half, nvcuda::wmma::col_major> frag_y, frag_d_y;
+
 	mtk::wmma::fill_zero(frag_y);
 	mtk::wmma::fill_zero(frag_d_y);
 
-	auto A_ptr = smem_A_ptr + (threadIdx.x & 0xffffffe0u);
 	for (unsigned i = 0; i < num_col_block; i++) {
 		nvcuda::wmma::fragment<nvcuda::wmma::accumulator, smem_n, smem_n, smem_n, float> frag_A, frag_d_A;
 
@@ -205,6 +205,7 @@ __device__ void compute_reflection_1_fp32_hmma_cor(
 					}
 				});
 
+		auto A_ptr = smem_A_ptr + (threadIdx.x & 0xffffffe0u);
 		nvcuda::wmma::load_matrix_sync(frag_A, A_ptr + i * smem_n, smem_ldm, nvcuda::wmma::mem_col_major);
 
 		nvcuda::wmma::mma_sync(frag_d_A, frag_d_y, frag_tmp, frag_d_A);
