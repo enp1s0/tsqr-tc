@@ -80,7 +80,8 @@ template <unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
 __device__ void compute_reflection_0_fp32_hmma_cor(
 		float* const smem_reduction,
 		const float* const smem_y,
-		const float* const smem_A
+		const float* const smem_A,
+		const float t
 		) {
 	constexpr unsigned num_accumulate = warp_size / smem_n;
 	constexpr float cor_scale = 1024.0f;
@@ -134,7 +135,7 @@ __device__ void compute_reflection_0_fp32_hmma_cor(
 				float* res_ptr = smem_reduction + smem_n * (threadIdx.x >> 5);
 				for (unsigned i = 0; i < fragment_index_count; i++) {
 					const auto frag_index = frag_index_list[i];
-					res_ptr[mem_index] = frag_ytA.x[frag_index] + frag_d_ytA.x[frag_index] / cor_scale;
+					res_ptr[mem_index] = (frag_ytA.x[frag_index] + frag_d_ytA.x[frag_index] / cor_scale) * (-t);
 				}
 			});
 
@@ -149,11 +150,12 @@ template <mtk::tsqr_tc::compute_mode::type compute_mode, unsigned smem_m, unsign
 __device__ void compute_reflection_0(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_reduction_ptr,
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_y_ptr,
-		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_a_ptr
+		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_a_ptr,
+		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type t 
 		) {
 	MTK_DEBUG_CALL_FUNC(printf("# --> %s\n", __func__));
 	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_hmma_cor) {
-		compute_reflection_0_fp32_hmma_cor<smem_m, smem_n, smem_ldm>(smem_reduction_ptr, smem_y_ptr, smem_a_ptr);
+		compute_reflection_0_fp32_hmma_cor<smem_m, smem_n, smem_ldm>(smem_reduction_ptr, smem_y_ptr, smem_a_ptr, t);
 	}
 	MTK_DEBUG_CALL_FUNC(printf("# <-- %s\n", __func__));
 }
@@ -166,8 +168,7 @@ template <unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
 __device__ void compute_reflection_1_fp32_hmma_cor(
 		float* const smem_A_ptr,
 		float* const smem_reduction_ptr,
-		const float* const smem_y_ptr,
-		const float t
+		const float* const smem_y_ptr
 		) {
 	constexpr unsigned num_col_block = warp_size / smem_n;
 	constexpr float cor_scale = 1024.0f;
@@ -176,7 +177,7 @@ __device__ void compute_reflection_1_fp32_hmma_cor(
 	mtk::wmma::fill_zero(frag_tmp);
 	mtk::wmma::fill_zero(frag_d_tmp);
 	mtk::wmma::foreach_v<decltype(frag_tmp)>([&](const unsigned frag_index_list[], const unsigned frag_index_count, const unsigned mem_index) {
-				const auto v = smem_reduction_ptr[mem_index] * (-t);
+				const auto v = smem_reduction_ptr[mem_index];
 				const auto hv = cutf::type::cast<half>(v);
 				const auto dhv = cutf::type::cast<half>((v - cutf::type::cast<float>(hv)) * cor_scale);
 				for (unsigned k = 0; k < frag_index_count; k++) {
@@ -225,12 +226,11 @@ template <mtk::tsqr_tc::compute_mode::type compute_mode, unsigned smem_m, unsign
 __device__ void compute_reflection_1(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_A_ptr,
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_reduction_ptr,
-		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_y_ptr,
-		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type t
+		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_y_ptr
 		) {
 	MTK_DEBUG_CALL_FUNC(printf("# --> %s\n", __func__));
 	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_hmma_cor) {
-		compute_reflection_1_fp32_hmma_cor<smem_m, smem_n, smem_ldm>(smem_A_ptr, smem_reduction_ptr, smem_y_ptr, t);
+		compute_reflection_1_fp32_hmma_cor<smem_m, smem_n, smem_ldm>(smem_A_ptr, smem_reduction_ptr, smem_y_ptr);
 	}
 	MTK_DEBUG_CALL_FUNC(printf("# <-- %s\n", __func__));
 }
@@ -793,10 +793,10 @@ __device__ void qr_kernel(
 			MTK_DEBUG_CALL_FUNC(printf("t = %e\n", t));
 			
 			// Compute ytA
-			compute_reflection_0<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_tmp_ptr, smem_y_ptr, smem_A_ptr);
+			compute_reflection_0<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_tmp_ptr, smem_y_ptr, smem_A_ptr, t);
 
 			// Compute R
-			compute_reflection_1<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_A_ptr, smem_tmp_ptr, smem_y_ptr, t);
+			compute_reflection_1<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(smem_A_ptr, smem_tmp_ptr, smem_y_ptr);
 
 			smem_Y_ptr[sn * DIM_MAX_M + threadIdx.x] = smem_y_ptr[threadIdx.x];
 			if (threadIdx.x == sn) {
