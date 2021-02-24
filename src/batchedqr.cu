@@ -234,7 +234,6 @@ __device__ void compute_base_w_fp32_hmma_cor(
 		) {
 	constexpr unsigned num_col_block = warp_size / smem_n;
 	constexpr unsigned frag_dim = smem_n * num_col_block;
-	constexpr float cor_scale = 1024;
 
 	if (n == 0) {
 		for (std::size_t i = 0; i < real_block_n; i++) {
@@ -336,7 +335,6 @@ __device__ void update_a_fp32_hmma_cor(
 		) {
 	constexpr unsigned num_col_block = warp_size / smem_n;
 	constexpr unsigned frag_dim = smem_n * num_col_block;
-	const float cor_scale = 1024.0f;
 
 	if (n == 0) {
 		return;
