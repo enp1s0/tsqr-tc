@@ -3,7 +3,7 @@
 #include <cutf/memory.hpp>
 #include <cutf/thread.hpp>
 #include <cutf/type.hpp>
-#include <wmma_extension.hpp>
+#include <wmma_extension/wmma_extension.hpp>
 
 //#define MTK_DEBUG_DEVICE
 //#define MTK_DEBUG_HOST
