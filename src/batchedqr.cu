@@ -756,7 +756,7 @@ __device__ void qr_kernel(
 
 	const unsigned num_n_blocks = (n + DIM_BLOCK_N - 1) / DIM_BLOCK_N;
 	for (std::size_t n_block = 0; n_block < num_n_blocks; n_block++) {
-		MTK_CLOCK_BREAKDOWN_INIT(5);
+		MTK_CLOCK_BREAKDOWN_INIT(6);
 		MTK_CLOCK_BREAKDOWN_RECORD(0);
 
 		const unsigned real_block_n = umin(DIM_BLOCK_N, n - DIM_BLOCK_N * n_block);
@@ -839,6 +839,7 @@ __device__ void qr_kernel(
 				m, n_block * DIM_BLOCK_N,
 				real_block_n
 				);
+		MTK_CLOCK_BREAKDOWN_RECORD(4);
 		MTK_DEBUG_PRINT_MATRIX(smem_W_ptr, m, real_block_n, DIM_MAX_M, "base W (Block Result)");
 		compute_w<compute_mode, DIM_MAX_M, DIM_BLOCK_N, DIM_MAX_M>(
 				smem_W_ptr,
@@ -849,18 +850,19 @@ __device__ void qr_kernel(
 				);
 		mtk::tsqr_tc::utils::copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_w_ptr + ldw * n_block * DIM_BLOCK_N, ldw, smem_W_ptr, m, real_block_n);
 		MTK_DEBUG_PRINT_MATRIX(smem_W_ptr, m, real_block_n, DIM_MAX_M, "W (Block Result)");
-		MTK_CLOCK_BREAKDOWN_RECORD(4);
+		MTK_CLOCK_BREAKDOWN_RECORD(5);
 #ifdef MTK_CLOCK_BREAKDOWN
 		if (threadIdx.x + blockIdx.x == 0) {
 			if (n_block == 0) {
-				printf("n_block,update_a,local_householder,store,update_w\n");
+				printf("n_block,update_a,local_householder,store,compute_base_w,compute_w\n");
 			}
-			printf("%lu,%lld,%lld,%lld,%lld\n",
+			printf("%lu,%lld,%lld,%lld,%lld,%lld\n",
 				n_block,
 				MTK_CLOCK_BREAKDOWN_DURATION(0, 1),
 				MTK_CLOCK_BREAKDOWN_DURATION(1, 2),
 				MTK_CLOCK_BREAKDOWN_DURATION(2, 3),
-				MTK_CLOCK_BREAKDOWN_DURATION(3, 4)
+				MTK_CLOCK_BREAKDOWN_DURATION(3, 4),
+				MTK_CLOCK_BREAKDOWN_DURATION(4, 5)
 				);
 		}
 #endif
