@@ -4,6 +4,7 @@
 #include <cutf/thread.hpp>
 #include <cutf/type.hpp>
 #include <wmma_extension/wmma_extension.hpp>
+#include <wmma_extension/hmma_f32_f32.hpp>
 
 //#define MTK_DEBUG_DEVICE
 //#define MTK_DEBUG_HOST
@@ -59,7 +60,7 @@
 namespace {
 constexpr unsigned warp_size = 32;
 
-template <unsigned block_size, unsigned DIM_N, class DST_T, class SRC_T>
+template <unsigned block_size, unsigned DIM_N, unsigned MINUS, class DST_T, class SRC_T>
 __device__ void copy_B_g2s(
 		DST_T* const dst_ptr,
 		const SRC_T* const src_ptr, const std::size_t ld_src,
@@ -75,6 +76,9 @@ __device__ void copy_B_g2s(
 				if (gn < n) {
 					v = src_ptr[gn * ld_src + cutf::thread::get_lane_id() + bm];
 				}
+				if constexpr (MINUS) {
+					v = -v;
+				}
 				dst_ptr[gn * DIM_N + cutf::thread::get_lane_id() + bm] = cutf::type::cast<DST_T>(v);
 			}
 		} else {
@@ -83,6 +87,9 @@ __device__ void copy_B_g2s(
 				auto v = cutf::type::cast<SRC_T>(0.0f);
 				if (gn < n && cutf::thread::get_lane_id() < real_bm) {
 					v = src_ptr[gn * ld_src + cutf::thread::get_lane_id() + bm];
+				}
+				if constexpr (MINUS) {
+					v = -v;
 				}
 				dst_ptr[gn * DIM_N + cutf::thread::get_lane_id() + bm] = cutf::type::cast<DST_T>(v);
 			}
@@ -193,14 +200,12 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 	constexpr std::size_t DIM_TC = 16;
 	constexpr std::size_t NUM_BLOCKINGS = K_BLOCKING / DIM_TC;
 
-	constexpr float cor_scale = 1024.f;
-
 	extern __shared__ float smem[];
 	float* const smem_B_ptr = smem;
 	float* const smem_A_ptr = smem_B_ptr + DIM_N * DIM_N;
 
 	// Load B
-	copy_B_g2s<block_size, DIM_N>(
+	copy_B_g2s<block_size, DIM_N, A_MINUS>(
 			smem_B_ptr,
 			gmem_B_ptr, ld_B,
 			n
@@ -208,7 +213,7 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 	MTK_DEBUG_PRINT_MATRIX(smem_B_ptr, n, n, DIM_N, "B");
 	__syncthreads();
 	for (std::size_t bm = 0; bm < m; bm += DIM_BLOCK_M) {
-		nvcuda::wmma::fragment<nvcuda::wmma::accumulator, DIM_TC, DIM_TC, DIM_TC, float> frag_C[DIM_BLOCK_M / DIM_TC], frag_d_C[DIM_BLOCK_M / DIM_TC];
+		mtk::wmma::fragment_f32<nvcuda::wmma::accumulator, DIM_BLOCK_M / DIM_TC * DIM_TC, DIM_TC, NUM_BLOCKINGS * DIM_TC, half> frag_C;
 		if constexpr (C_EXIST) {
 			// We use n x n size of matrix C in TSQR even if the size of D is 2n x n.
 			if (bm < n) {
@@ -220,22 +225,13 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 						);
 				MTK_DEBUG_PRINT_MATRIX(smem_A_ptr, DIM_BLOCK_M, n, DIM_BLOCK_M, "C");
 				__syncthreads();
-				for (auto sn = decltype(DIM_BLOCK_M)(0); sn < DIM_BLOCK_M; sn += DIM_TC) {
-					auto load_ptr = smem_A_ptr + DIM_BLOCK_M * DIM_TC * cutf::thread::get_warp_id() + sn;
-					nvcuda::wmma::load_matrix_sync(frag_C[sn / DIM_TC], load_ptr, DIM_BLOCK_M, nvcuda::wmma::mem_col_major);
-					mtk::wmma::fill_zero(frag_d_C[sn / DIM_TC]);
-				}
+				auto load_ptr = smem_A_ptr + DIM_BLOCK_M * DIM_TC * cutf::thread::get_warp_id();
+				mtk::wmma::load_matrix_sync(frag_C, load_ptr, DIM_BLOCK_M, nvcuda::wmma::mem_col_major);
 			} else {
-				for (auto sn = decltype(DIM_BLOCK_M)(0); sn < DIM_BLOCK_M / DIM_TC; sn++) {
-					mtk::wmma::fill_zero(frag_C[sn]);
-					mtk::wmma::fill_zero(frag_d_C[sn]);
-				}
+				mtk::wmma::fill_zero(frag_C);
 			}
 		} else {
-			for (auto sn = decltype(DIM_BLOCK_M)(0); sn < DIM_BLOCK_M / DIM_TC; sn++) {
-				mtk::wmma::fill_zero(frag_C[sn]);
-				mtk::wmma::fill_zero(frag_d_C[sn]);
-			}
+			mtk::wmma::fill_zero(frag_C);
 		}
 		const auto real_m = min(DIM_BLOCK_M, m - bm);
 		MTK_DEBUG_PRINT_MATRIX(gmem_A_ptr, m, n, ld_A, "GMEM_A");
@@ -256,64 +252,15 @@ __device__ void gemm_MxNxN_core_fp32_hmma_cor(
 		__syncthreads();
 		for (auto bk = decltype(DIM_N)(0); bk < DIM_N; bk += K_BLOCKING) {
 			const auto real_num_blockings = min(NUM_BLOCKINGS, (n - bk + DIM_TC - 1) / DIM_TC);
-			nvcuda::wmma::fragment<nvcuda::wmma::matrix_b, DIM_TC, DIM_TC, DIM_TC, half, nvcuda::wmma::col_major> frag_B[NUM_BLOCKINGS], frag_d_B[NUM_BLOCKINGS];
-			const auto b_offset = cutf::thread::get_warp_id() * DIM_N * DIM_TC + bk;
-			mtk::wmma::foreach<decltype(frag_B[0])>(
-				[&](const unsigned* frag_index_list, const unsigned fragment_index_count, const unsigned mem_index) {
-					const auto mem_m = mem_index % DIM_TC;
-					const auto mem_n = mem_index / DIM_TC;
-					const auto m_offset = b_offset + mem_n * DIM_N + mem_m;
-					for (unsigned k = 0; k < real_num_blockings; k++) {
-						auto v = smem_B_ptr[m_offset + k * DIM_TC];
-						if constexpr (A_MINUS) {
-							v *= -1.f;
-						}
-						const auto hv = cutf::type::cast<half>(v);
-						const auto dhv = cutf::type::cast<half>((v - cutf::type::cast<float>(hv)) * cor_scale);
-						for (unsigned i = 0; i < fragment_index_count; i++) {
-							const auto frag_index = frag_index_list[i];
-							frag_B[k].x[frag_index] = hv;
-							frag_d_B[k].x[frag_index] = dhv;
-						}
-					}
-				});
-			for (auto sn = decltype(DIM_BLOCK_M)(0); sn < DIM_BLOCK_M; sn += DIM_TC) {
-				nvcuda::wmma::fragment<nvcuda::wmma::matrix_a, DIM_TC, DIM_TC, DIM_TC, half, nvcuda::wmma::col_major> frag_A[NUM_BLOCKINGS], frag_d_A[NUM_BLOCKINGS];
-				const auto a_offset = bk * DIM_BLOCK_M + sn;
-				mtk::wmma::foreach<decltype(frag_A[0])>(
-					[&](const unsigned* frag_index_list, const unsigned fragment_index_count, const unsigned mem_index) {
-						const auto mem_m = mem_index % DIM_TC;
-						const auto mem_n = mem_index / DIM_TC;
-						const auto m_offset = a_offset + mem_n * DIM_BLOCK_M + mem_m;
-						for (unsigned k = 0; k < real_num_blockings; k++) {
-							const auto v = smem_A_ptr[m_offset + k * DIM_TC * DIM_BLOCK_M];
-							const auto hv = cutf::type::cast<half>(v);
-							const auto dhv = cutf::type::cast<half>((v - cutf::type::cast<float>(hv)) * cor_scale);
-							for (unsigned i = 0; i < fragment_index_count; i++) {
-								const auto frag_index = frag_index_list[i];
-								frag_A[k].x[frag_index] = hv;
-								frag_d_A[k].x[frag_index] = dhv;
-							}
-						}
-					});
+			mtk::wmma::fragment_f32<nvcuda::wmma::matrix_b, DIM_BLOCK_M / DIM_TC * DIM_TC, DIM_TC, NUM_BLOCKINGS * DIM_TC, half, nvcuda::wmma::col_major> frag_B;
+			mtk::wmma::load_matrix_sync(frag_B, smem_B_ptr + cutf::thread::get_warp_id() * DIM_N * DIM_TC + bk, DIM_N);
 
-				const auto c_index = sn / DIM_TC;
-				for (unsigned k = 0; k < real_num_blockings; k++) {
-					nvcuda::wmma::mma_sync(frag_d_C[c_index], frag_A  [k], frag_d_B[k], frag_d_C[c_index]);
-					nvcuda::wmma::mma_sync(frag_d_C[c_index], frag_d_A[k], frag_B  [k], frag_d_C[c_index]);
-					nvcuda::wmma::mma_sync(frag_C  [c_index], frag_A  [k], frag_B  [k], frag_C  [c_index]);
-				}
-			}
+			mtk::wmma::fragment_f32<nvcuda::wmma::matrix_a, DIM_BLOCK_M / DIM_TC * DIM_TC, DIM_TC, NUM_BLOCKINGS * DIM_TC, half, nvcuda::wmma::col_major> frag_A;
+			mtk::wmma::load_matrix_sync(frag_A, smem_A_ptr + bk * DIM_BLOCK_M, DIM_BLOCK_M);
+			mtk::wmma::mma_sync(frag_C, frag_A, frag_B, frag_C);
 		}
 		__syncthreads();
-		for (auto sn = decltype(DIM_BLOCK_M)(0); sn < DIM_BLOCK_M; sn += DIM_TC) {
-			const auto c_index = sn / DIM_TC;
-			for (unsigned i = 0; i < frag_C[0].num_elements; i++) {
-				frag_C[c_index].x[i] += frag_d_C[c_index].x[i] / cor_scale;
-			}
-			auto store_ptr = smem_A_ptr + DIM_BLOCK_M * DIM_TC * cutf::thread::get_warp_id() + sn;
-			nvcuda::wmma::store_matrix_sync(store_ptr, frag_C[c_index], DIM_BLOCK_M, nvcuda::wmma::mem_col_major);
-		}
+		mtk::wmma::store_matrix_sync(smem_A_ptr + DIM_BLOCK_M * DIM_TC * cutf::thread::get_warp_id(), frag_C, DIM_BLOCK_M, nvcuda::wmma::mem_col_major);
 		__syncthreads();
 		copy_matrix_s2g_XPxN<block_size, DIM_BLOCK_M, DIM_N>(
 				gmem_D_ptr + bm, ld_D,
