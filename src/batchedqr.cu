@@ -3,7 +3,7 @@
 #include <cutf/type.hpp>
 #include <cutf/math.hpp>
 #include <cutf/thread.hpp>
-#include <wmma_extension.hpp>
+#include <wmma_extension/wmma_extension.hpp>
 
 #include <tsqr_tc/batchedqr.hpp>
 #include "utils.hpp"
