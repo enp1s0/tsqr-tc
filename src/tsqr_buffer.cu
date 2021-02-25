@@ -83,3 +83,4 @@ void mtk::tsqr_tc::tsqr_buffer<compute_mode>::free() {
 }
 
 template class mtk::tsqr_tc::tsqr_buffer<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor>;
+template class mtk::tsqr_tc::tsqr_buffer<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor>;
