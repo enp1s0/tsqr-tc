@@ -34,6 +34,13 @@ struct select_fragemnt<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor, Use, m
 	using type = typename mtk::wmma::fragment_f32_no_cor<Use, m, n, k, nvcuda::wmma::precision::tf32, Layout>;
 };
 
+template <mtk::tsqr_tc::compute_mode::type compute_type>
+constexpr unsigned min_fragment_n = 0;
+template <> constexpr unsigned min_fragment_n<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor   > = mtk::wmma::min_fragment_n<half>;
+template <> constexpr unsigned min_fragment_n<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_no_cor> = mtk::wmma::min_fragment_n<half>;
+template <> constexpr unsigned min_fragment_n<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor   > = mtk::wmma::min_fragment_n<nvcuda::wmma::precision::tf32>;
+template <> constexpr unsigned min_fragment_n<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor> = mtk::wmma::min_fragment_n<nvcuda::wmma::precision::tf32>;
+
 // This function accumulates vectors on shared memory.
 // Restrictions:
 // count == block_size / war_size
