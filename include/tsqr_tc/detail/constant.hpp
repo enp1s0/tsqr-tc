@@ -5,6 +5,7 @@ namespace tsqr_tc {
 namespace compute_mode {
 using type = unsigned;
 static const type fp32_fp16_hmma_cor = 1;
+static const type fp32_tf32_hmma_cor = 2;
 } // namespace compute_mode
 } // namespace tsqr_tc
 } // namespace mtk

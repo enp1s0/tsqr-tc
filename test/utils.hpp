@@ -11,6 +11,7 @@ namespace test_utils {
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
 inline const char* get_mode_name();
 template <> inline const char* get_mode_name<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor>() {return "fp32_fp16_hmma_cor";}
+template <> inline const char* get_mode_name<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor>() {return "fp32_tf32_hmma_cor";}
 
 template <class T>
 double compute_residual_in_dp(
