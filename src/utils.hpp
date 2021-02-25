@@ -9,7 +9,7 @@ namespace mtk {
 namespace tsqr_tc {
 namespace utils {
 
-template <mtk::tsqr_tc::compute_mode::type compute_type, class Use, unsigned m, unsigned n, unsigned k, class T, class Layout = void>
+template <mtk::tsqr_tc::compute_mode::type compute_type, class Use, unsigned m, unsigned n, unsigned k, class Layout = void>
 struct select_fragemnt {
 	using type = void;
 };
