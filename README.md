@@ -1,4 +1,4 @@
-# TSQR on TesnorCores
+# TSQR on TensorCores
 
 This library provides a TSQR function which works on NVIDIA TensorCores.
 The function compute a QR factorization of a m x n matrix (n <= 128).
