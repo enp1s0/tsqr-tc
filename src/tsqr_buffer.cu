@@ -82,5 +82,7 @@ void mtk::tsqr_tc::tsqr_buffer<compute_mode>::free() {
 	free_host_func(index_buffer_host_ptr);
 }
 
-template class mtk::tsqr_tc::tsqr_buffer<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor>;
-template class mtk::tsqr_tc::tsqr_buffer<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor>;
+template class mtk::tsqr_tc::tsqr_buffer<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor   >;
+template class mtk::tsqr_tc::tsqr_buffer<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor   >;
+template class mtk::tsqr_tc::tsqr_buffer<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_no_cor>;
+template class mtk::tsqr_tc::tsqr_buffer<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor>;
