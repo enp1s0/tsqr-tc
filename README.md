@@ -23,6 +23,8 @@ This library does not support Turing architecture because it does not have enoug
 1. Clone this repository
 ```bash
 git clone https://github.com/enp1s0/tsqr-tc
+cd tsqr-tc
+git submodule update --init --recursive
 ```
 
 2. Build the library
