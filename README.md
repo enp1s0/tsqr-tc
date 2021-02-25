@@ -4,10 +4,7 @@ This library provides a TSQR function which works on NVIDIA TensorCores.
 The function compute a QR factorization of a m x n matrix (n <= 128).
 
 ## Supported GPUs
-- Volta
-- Ampere
-
-This library does not support Turing architecture because it does not have enough shared memory.
+- Ampere (sm_80, sm_86)
 
 ## Requirements
 - C++ >= 17 (This library uses `if constexpr`)
