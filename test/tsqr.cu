@@ -217,7 +217,7 @@ void test_performance(const std::size_t m, const std::size_t n, const unsigned t
 int main() {
 	std::printf("m,n,mode,residual,orthogonality\n");
 	for (std::size_t lm = min_m_log; lm <= max_m_log; lm++) {
-		test_accuracy<mtk::tsqr_tc::compute_mode::fp32_hmma_cor>(1lu << lm, n, test_count);
+		test_accuracy<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor>(1lu << lm, n, test_count);
 	}
 
 	for (std::size_t lm = min_m_log; lm <= max_m_log; lm++) {
@@ -226,7 +226,7 @@ int main() {
 
 	std::printf("m,n,mode,time,buffer_size\n");
 	for (std::size_t lm = min_m_log; lm <= max_m_log; lm++) {
-		test_performance<mtk::tsqr_tc::compute_mode::fp32_hmma_cor>(1lu << lm, n, test_count);
+		test_performance<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor>(1lu << lm, n, test_count);
 	}
 
 	for (std::size_t lm = min_m_log; lm <= max_m_log; lm++) {

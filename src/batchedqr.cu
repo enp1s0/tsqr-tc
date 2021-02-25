@@ -63,7 +63,7 @@ __device__ COMPUTE_T compute_norm2(const T* const ptr, const unsigned size) {
 // - smem_m == block_size
 // - smem_n == DIM_BLOCK_N
 template <unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
-__device__ void compute_reflection_0_fp32_hmma_cor(
+__device__ void compute_reflection_0_fp32_fp16_hmma_cor(
 		float* const smem_reduction,
 		const float* const smem_y,
 		const float* const smem_A,
@@ -97,8 +97,8 @@ __device__ void compute_reflection_0(
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type t 
 		) {
 	MTK_DEBUG_CALL_FUNC(printf("# --> %s\n", __func__));
-	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_hmma_cor) {
-		compute_reflection_0_fp32_hmma_cor<smem_m, smem_n, smem_ldm>(smem_reduction_ptr, smem_y_ptr, smem_a_ptr, t);
+	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor) {
+		compute_reflection_0_fp32_fp16_hmma_cor<smem_m, smem_n, smem_ldm>(smem_reduction_ptr, smem_y_ptr, smem_a_ptr, t);
 	}
 	MTK_DEBUG_CALL_FUNC(printf("# <-- %s\n", __func__));
 }
@@ -108,7 +108,7 @@ __device__ void compute_reflection_0(
 // - smem_m == block_size
 // - smem_n == DIM_BLOCK_N
 template <unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
-__device__ void compute_reflection_1_fp32_hmma_cor(
+__device__ void compute_reflection_1_fp32_fp16_hmma_cor(
 		float* const smem_A_ptr,
 		float* const smem_reduction_ptr,
 		const float* const smem_y_ptr
@@ -143,8 +143,8 @@ __device__ void compute_reflection_1(
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_y_ptr
 		) {
 	MTK_DEBUG_CALL_FUNC(printf("# --> %s\n", __func__));
-	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_hmma_cor) {
-		compute_reflection_1_fp32_hmma_cor<smem_m, smem_n, smem_ldm>(smem_A_ptr, smem_reduction_ptr, smem_y_ptr);
+	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor) {
+		compute_reflection_1_fp32_fp16_hmma_cor<smem_m, smem_n, smem_ldm>(smem_A_ptr, smem_reduction_ptr, smem_y_ptr);
 	}
 	MTK_DEBUG_CALL_FUNC(printf("# <-- %s\n", __func__));
 }
@@ -154,7 +154,7 @@ __device__ void compute_reflection_1(
 // - smem_m == block_size
 // - smem_n == DIM_BLOCK_N
 template <unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
-__device__ void compute_w_fp32_hmma_cor(
+__device__ void compute_w_fp32_fp16_hmma_cor(
 		float* const smem_W_ptr,
 		float* const smem_reduction_ptr,
 		const float* const smem_Y_ptr,
@@ -201,8 +201,8 @@ __device__ void compute_w(
 		const std::size_t m, const std::size_t n, const std::size_t real_block_n
 		) {
 	MTK_DEBUG_CALL_FUNC(printf("# --> %s\n", __func__));
-	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_hmma_cor) {
-		compute_w_fp32_hmma_cor<smem_m, smem_n, smem_ldm>(
+	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor) {
+		compute_w_fp32_fp16_hmma_cor<smem_m, smem_n, smem_ldm>(
 				smem_W_ptr,
 				smem_reduction_ptr,
 				smem_Y_ptr,
@@ -219,7 +219,7 @@ __device__ void compute_w(
 // - smem_m == block_size
 // - smem_n == DIM_BLOCK_N
 template <unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
-__device__ void compute_base_w_fp32_hmma_cor(
+__device__ void compute_base_w_fp32_fp16_hmma_cor(
 		float* const smem_workspace_large_0_ptr,
 		float* const smem_workspace_large_1_ptr,
 		float* const smem_workspace_large_2_ptr,
@@ -298,8 +298,8 @@ __device__ void compute_base_w(
 		const std::size_t real_block_n
 		) {
 	MTK_DEBUG_CALL_FUNC(printf("# --> %s\n", __func__));
-	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_hmma_cor) {
-		compute_base_w_fp32_hmma_cor<smem_m, smem_n, smem_ldm>(
+	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor) {
+		compute_base_w_fp32_fp16_hmma_cor<smem_m, smem_n, smem_ldm>(
 				smem_workspace_large_0_ptr,
 				smem_workspace_large_1_ptr,
 				smem_workspace_large_2_ptr,
@@ -320,7 +320,7 @@ __device__ void compute_base_w(
 // - smem_m == block_size
 // - smem_n == DIM_BLOCK_N
 template <unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
-__device__ void update_a_fp32_hmma_cor(
+__device__ void update_a_fp32_fp16_hmma_cor(
 		float* const smem_workspace_large_0_ptr,
 		float* const smem_workspace_large_1_ptr,
 		float* const smem_workspace_large_2_ptr,
@@ -399,8 +399,8 @@ __device__ void update_a(
 		const std::size_t real_block_n
 		) {
 	MTK_DEBUG_CALL_FUNC(printf("# --> %s\n", __func__));
-	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_hmma_cor) {
-		update_a_fp32_hmma_cor<smem_m, smem_n, smem_ldm>(
+	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor) {
+		update_a_fp32_fp16_hmma_cor<smem_m, smem_n, smem_ldm>(
 				smem_workspace_large_0_ptr,
 				smem_workspace_large_1_ptr,
 				smem_workspace_large_2_ptr,
@@ -624,7 +624,7 @@ template void mtk::tsqr_tc::qr256x128<compute_mode>( \
 		const cudaStream_t \
 		)
 
-QR256X128_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_hmma_cor);
+QR256X128_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor);
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
 void mtk::tsqr_tc::qr256x128_batched(
@@ -663,4 +663,4 @@ template void mtk::tsqr_tc::qr256x128_batched<compute_mode>( \
 		const cudaStream_t \
 		)
 
-QR256X128_BATCHED_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_hmma_cor);
+QR256X128_BATCHED_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor);

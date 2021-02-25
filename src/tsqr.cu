@@ -185,7 +185,7 @@ __device__ void copy_matrix_s2g_XPxN(
 }
 
 template <int A_MINUS, int A_TRANS, int C_EXIST>
-__device__ void gemm_MxNxN_core_fp32_hmma_cor(
+__device__ void gemm_MxNxN_core_fp32_fp16_hmma_cor(
 		float* const gmem_D_ptr, const std::size_t ld_D,
 		const float* const gmem_A_ptr, const std::size_t ld_A,
 		const float* const gmem_B_ptr, const std::size_t ld_B,
@@ -280,8 +280,8 @@ __device__ void gemm_MxNxN_core(
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_C_ptr, const std::size_t ld_C,
 		const std::size_t m, const std::size_t n
 		) {
-	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_hmma_cor) {
-		gemm_MxNxN_core_fp32_hmma_cor<A_MINUS, A_TRANS, C_EXIST>(
+	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor) {
+		gemm_MxNxN_core_fp32_fp16_hmma_cor<A_MINUS, A_TRANS, C_EXIST>(
 				gmem_D_ptr, ld_D,
 				gmem_A_ptr, ld_A,
 				gmem_B_ptr, ld_B,
@@ -539,4 +539,4 @@ template void mtk::tsqr_tc::tsqr(\
 		const cudaStream_t\
 		)
 
-MTK_INSTANCE_TSQR(mtk::tsqr_tc::compute_mode::fp32_hmma_cor);
+MTK_INSTANCE_TSQR(mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor);

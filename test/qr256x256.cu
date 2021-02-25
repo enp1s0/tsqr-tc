@@ -126,5 +126,5 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 }
 
 int main() {
-	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_hmma_cor>(256, 256, 1lu << 12);
+	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor>(256, 256, 1lu << 12);
 }
