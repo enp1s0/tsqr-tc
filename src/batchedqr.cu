@@ -69,8 +69,7 @@ __device__ void compute_reflection_0_fp32_hmma_cor(
 		const float* const smem_A,
 		const float t
 		) {
-	constexpr unsigned num_accumulate = warp_size / smem_n;
-	constexpr unsigned frag_dim = smem_n * num_accumulate;
+	constexpr unsigned frag_dim = warp_size;
 	mtk::wmma::fragment_f32<nvcuda::wmma::matrix_a   , frag_dim, mtk::wmma::min_fragment_n<half>, frag_dim, half, nvcuda::wmma::row_major> frag_yt;
 	mtk::wmma::fragment_f32<nvcuda::wmma::matrix_b   , frag_dim, mtk::wmma::min_fragment_n<half>, frag_dim, half, nvcuda::wmma::col_major> frag_A;
 	mtk::wmma::fragment_f32<nvcuda::wmma::accumulator, frag_dim, mtk::wmma::min_fragment_n<half>, frag_dim, half> frag_ytA;
@@ -162,8 +161,7 @@ __device__ void compute_w_fp32_hmma_cor(
 		const float* const smem_t_ptr,
 		const std::size_t m, const std::size_t n, const std::size_t real_block_n
 		) {
-	constexpr unsigned num_col_block = warp_size / smem_n;
-	constexpr unsigned frag_dim = smem_n * num_col_block;
+	constexpr unsigned frag_dim = warp_size;
 	// Compute YtY
 
 	{
@@ -232,8 +230,7 @@ __device__ void compute_base_w_fp32_hmma_cor(
 		const std::size_t m, const std::size_t n,
 		const std::size_t real_block_n
 		) {
-	constexpr unsigned num_col_block = warp_size / smem_n;
-	constexpr unsigned frag_dim = smem_n * num_col_block;
+	constexpr unsigned frag_dim = warp_size;
 
 	if (n == 0) {
 		for (std::size_t i = 0; i < real_block_n; i++) {
@@ -333,8 +330,7 @@ __device__ void update_a_fp32_hmma_cor(
 		const std::size_t m, const std::size_t n,
 		const std::size_t real_block_n
 		) {
-	constexpr unsigned num_col_block = warp_size / smem_n;
-	constexpr unsigned frag_dim = smem_n * num_col_block;
+	constexpr unsigned frag_dim = warp_size;
 
 	if (n == 0) {
 		return;
