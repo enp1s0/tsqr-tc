@@ -18,6 +18,7 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 	std::printf("# --- TEST --- %s / %s\n", __FILE__, __func__);
 	std::printf("%20s : %u x %u\n", "input size", m, n);
 	std::printf("%20s : %lu\n", "batch size", batch_size);
+	std::printf("%20s : %s\n", "compute_mode", mtk::tsqr_tc::test_utils::get_mode_name<compute_mode>());
 	using compute_t = typename mtk::tsqr_tc::detail::get_type<compute_mode>::type;
 	auto hA_uptr = cutf::memory::get_host_unique_ptr<compute_t>(m * n * batch_size);
 	auto hW_uptr = cutf::memory::get_host_unique_ptr<compute_t>(m * n * batch_size);
@@ -127,4 +128,5 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 
 int main() {
 	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor>(256, 256, 1lu << 12);
+	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor>(256, 256, 1lu << 12);
 }
