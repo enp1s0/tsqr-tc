@@ -12,9 +12,12 @@ The function compute a QR factorization of a m x n matrix (n <= 128).
 
 ## Supported computation mode
 
-|  Mode name    | TensorCore | Error correction |
-|:--------------|:-----------|:-----------------|
-|`fp32_hmma_cor`| HMMA       | Yes              |
+|  Mode name            | TensorCore | Error correction |
+|:----------------------|:-----------|:-----------------|
+|`fp32_fp16_hmma_cor`   | HMMA-FP16  | Yes              |
+|`fp32_fp16_hmma_no_cor`| HMMA-FP16  | No               |
+|`fp32_tf32_hmma_cor`   | HMMA-TF32  | Yes              |
+|`fp32_tf32_hmma_no_cor`| HMMA-TF32  | No               |
 
 ## Hou to use
 1. Clone this repository
@@ -39,7 +42,7 @@ nvcc -L/path/to/tsqr-tc/lib -I/path/to/tsqr-tc/include -ltsqr-tc ...
 // Compute QR factorization of a m x n matrix
 #include <tsqr_tc/tsqr.hpp>
 
-constexpr compute_mode = mtk::tsqr_tc::compute_mode::fp32_hmma_cor;
+constexpr compute_mode = mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor;
 
 int main() {
 	// ...

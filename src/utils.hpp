@@ -1,10 +1,45 @@
 #ifndef __MTK_TSQR_TC_MATRIX_UTILS_HPP__
 #define __MTK_TSQR_TC_MATRIX_UTILS_HPP__
 #include <cutf/type.hpp>
+#include <tsqr_tc/detail/constant.hpp>
+#include <wmma_extension/hmma_f32_f32.hpp>
+#include <wmma_extension/hmma_f32_f32_no_cor.hpp>
 
 namespace mtk {
 namespace tsqr_tc {
 namespace utils {
+
+template <mtk::tsqr_tc::compute_mode::type compute_type, class Use, unsigned m, unsigned n, unsigned k, class Layout = void>
+struct select_fragemnt {
+	using type = void;
+};
+
+template <class Use, unsigned m, unsigned n, unsigned k, class Layout>
+struct select_fragemnt<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor, Use, m, n, k, Layout> {
+	using type = typename mtk::wmma::fragment_f32<Use, m, n, k, half, Layout>;
+};
+
+template <class Use, unsigned m, unsigned n, unsigned k, class Layout>
+struct select_fragemnt<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor, Use, m, n, k, Layout> {
+	using type = typename mtk::wmma::fragment_f32<Use, m, n, k, nvcuda::wmma::precision::tf32, Layout>;
+};
+
+template <class Use, unsigned m, unsigned n, unsigned k, class Layout>
+struct select_fragemnt<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_no_cor, Use, m, n, k, Layout> {
+	using type = typename mtk::wmma::fragment_f32_no_cor<Use, m, n, k, half, Layout>;
+};
+
+template <class Use, unsigned m, unsigned n, unsigned k, class Layout>
+struct select_fragemnt<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor, Use, m, n, k, Layout> {
+	using type = typename mtk::wmma::fragment_f32_no_cor<Use, m, n, k, nvcuda::wmma::precision::tf32, Layout>;
+};
+
+template <mtk::tsqr_tc::compute_mode::type compute_type>
+constexpr unsigned min_fragment_n = 0;
+template <> constexpr unsigned min_fragment_n<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor   > = mtk::wmma::min_fragment_n<half>;
+template <> constexpr unsigned min_fragment_n<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_no_cor> = mtk::wmma::min_fragment_n<half>;
+template <> constexpr unsigned min_fragment_n<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor   > = mtk::wmma::min_fragment_n<nvcuda::wmma::precision::tf32>;
+template <> constexpr unsigned min_fragment_n<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor> = mtk::wmma::min_fragment_n<nvcuda::wmma::precision::tf32>;
 
 // This function accumulates vectors on shared memory.
 // Restrictions:
