@@ -169,13 +169,8 @@ __device__ void compute_reflection_1_notc(
 		float* const smem_reduction_ptr,
 		const float* const smem_y_ptr
 		) {
-	constexpr unsigned num_col_block = warp_size / smem_n;
-
-	for (unsigned i = 0; i < num_col_block; i++) {
-		auto y_ptr = smem_y_ptr + (threadIdx.x & 0xffffffe0u) + i * smem_n;
-		auto A_ptr = smem_A_ptr + (threadIdx.x & 0xffffffe0u);
-
-		mtk::gemm_core::ger_core16x16<16, true>(A_ptr, smem_ldm, y_ptr, smem_reduction_ptr, threadIdx.x & 0x1f);
+	for (unsigned i = 0; i < smem_n; i++) {
+		smem_A_ptr[i * smem_ldm + threadIdx.x] += smem_y_ptr[threadIdx.x] * smem_reduction_ptr[i];
 	}
 }
 
