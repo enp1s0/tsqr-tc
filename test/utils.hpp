@@ -14,6 +14,7 @@ template <> inline const char* get_mode_name<mtk::tsqr_tc::compute_mode::fp32_fp
 template <> inline const char* get_mode_name<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor   >() {return "fp32_tf32_hmma_cor"   ;}
 template <> inline const char* get_mode_name<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_no_cor>() {return "fp32_fp16_hmma_no_cor";}
 template <> inline const char* get_mode_name<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor>() {return "fp32_tf32_hmma_no_cor";}
+template <> inline const char* get_mode_name<mtk::tsqr_tc::compute_mode::fp32_notc            >() {return "fp32_notc";}
 
 template <class T>
 double compute_residual_in_dp(
