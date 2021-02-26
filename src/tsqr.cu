@@ -5,6 +5,7 @@
 #include <cutf/type.hpp>
 #include <wmma_extension/wmma_extension.hpp>
 #include <wmma_extension/hmma_f32_f32.hpp>
+#include <gemm_core/gemm_core.hpp>
 #include "utils.hpp"
 
 //#define MTK_DEBUG_DEVICE
@@ -273,6 +274,105 @@ __device__ void gemm_MxNxN_core_hmma(
 	MTK_DEBUG_CALL_FUNC(printf("# -<< %s<%d, %d, %d>\n", __func__, A_MINUS, A_TRANS, C_EXIST));
 }
 
+template <int A_MINUS, int A_TRANS, int C_EXIST>
+__device__ void gemm_MxNxN_core_notc(
+		float* const gmem_D_ptr, const std::size_t ld_D,
+		const float* const gmem_A_ptr, const std::size_t ld_A,
+		const float* const gmem_B_ptr, const std::size_t ld_B,
+		const float* const gmem_C_ptr, const std::size_t ld_C,
+		const std::size_t m, const std::size_t n
+		) {
+	MTK_DEBUG_CALL_FUNC(printf("# ->> %s<%d, %d, %d>(%3lu, %3lu)\n", __func__, A_MINUS, A_TRANS, C_EXIST, m, n));
+	constexpr unsigned block_size = 256;
+	constexpr std::size_t DIM_N = 128;
+	constexpr std::size_t DIM_BLOCK_M = 64;
+	constexpr std::size_t DIM_TC = 16;
+
+	extern __shared__ float smem[];
+	float* const smem_B_ptr = smem;
+	float* const smem_A_ptr = smem_B_ptr + DIM_N * DIM_N;
+
+	// Load B
+	copy_B_g2s<block_size, DIM_N, A_MINUS>(
+			smem_B_ptr,
+			gmem_B_ptr, ld_B,
+			n
+			);
+	MTK_DEBUG_PRINT_MATRIX(smem_B_ptr, n, n, DIM_N, "B");
+	__syncthreads();
+	for (std::size_t bm = 0; bm < m; bm += DIM_BLOCK_M) {
+		const auto real_m = min(DIM_BLOCK_M, m - bm);
+		MTK_DEBUG_PRINT_MATRIX(gmem_A_ptr, m, n, ld_A, "GMEM_A");
+		if constexpr (A_TRANS == 0) {
+			copy_matrix_g2s_XPxN<block_size, DIM_BLOCK_M, DIM_N, A_TRANS>(
+					smem_A_ptr,
+					gmem_A_ptr + bm, ld_A,
+					real_m, n
+					);
+		} else {
+			copy_matrix_g2s_XPxN<block_size, DIM_BLOCK_M, DIM_N, A_TRANS>(
+					smem_A_ptr,
+					gmem_A_ptr + bm * ld_A, ld_A,
+					real_m, n
+					);
+		}
+		MTK_DEBUG_PRINT_MATRIX(smem_A_ptr, real_m, n, DIM_BLOCK_M, "A block");
+		__syncthreads();
+
+		float reg[DIM_BLOCK_M * DIM_TC / warp_size];
+		for (unsigned i = 0; i < DIM_BLOCK_M * DIM_TC / warp_size; i++) {
+			reg[i] = 0.0f;
+		}
+		for (unsigned i = 0; i < DIM_TC; i++) {
+			for (unsigned k = 0; k < n; k++) {
+				const auto b_v = smem_B_ptr[cutf::thread::get_warp_id() * DIM_N * DIM_TC + k + i * DIM_N];
+				for (unsigned j = 0; j < DIM_BLOCK_M; j += warp_size) {
+					const auto a_v = smem_A_ptr[k * DIM_BLOCK_M + j + (threadIdx.x & 0x1f)];
+					reg[i * (DIM_BLOCK_M / warp_size) + j / warp_size] += a_v * b_v;
+				}
+			}
+		}
+		__syncthreads();
+		if constexpr (C_EXIST) {
+			if (bm < n) {
+				const auto real_m = min(DIM_BLOCK_M, n - bm);
+				copy_matrix_g2s_XPxN<block_size, DIM_BLOCK_M, DIM_N, 0>(
+						smem_A_ptr,
+						gmem_C_ptr + bm, ld_C,
+						real_m, n
+						);
+				MTK_DEBUG_PRINT_MATRIX(smem_A_ptr, DIM_BLOCK_M, n, DIM_BLOCK_M, "C");
+				__syncthreads();
+				for (unsigned i = 0; i < DIM_TC; i++) {
+					for (unsigned j = 0; j < DIM_BLOCK_M; j += warp_size) {
+						smem_A_ptr[cutf::thread::get_warp_id() * DIM_BLOCK_M * DIM_TC + j + (threadIdx.x & 0x1f) + i * DIM_BLOCK_M] += reg[i * DIM_BLOCK_M / warp_size + j / warp_size];
+					}
+				}
+			} else {
+				for (unsigned i = 0; i < DIM_TC; i++) {
+					for (unsigned j = 0; j < DIM_BLOCK_M; j += warp_size) {
+						smem_A_ptr[cutf::thread::get_warp_id() * DIM_BLOCK_M * DIM_TC + j + (threadIdx.x & 0x1f) + i * DIM_BLOCK_M] = reg[i * DIM_BLOCK_M / warp_size + j / warp_size];
+					}
+				}
+			}
+		} else {
+			for (unsigned i = 0; i < DIM_TC; i++) {
+				for (unsigned j = 0; j < DIM_BLOCK_M; j += warp_size) {
+					smem_A_ptr[cutf::thread::get_warp_id() * DIM_BLOCK_M * DIM_TC + j + (threadIdx.x & 0x1f) + i * DIM_BLOCK_M] = reg[i * DIM_BLOCK_M / warp_size + j / warp_size];
+				}
+			}
+		}
+		__syncthreads();
+		copy_matrix_s2g_XPxN<block_size, DIM_BLOCK_M, DIM_N>(
+				gmem_D_ptr + bm, ld_D,
+				smem_A_ptr,
+				real_m, n
+				);
+		MTK_DEBUG_PRINT_MATRIX(smem_A_ptr, real_m, n, DIM_BLOCK_M, "D block");
+	}
+	MTK_DEBUG_CALL_FUNC(printf("# -<< %s<%d, %d, %d>\n", __func__, A_MINUS, A_TRANS, C_EXIST));
+}
+
 template <mtk::tsqr_tc::compute_mode::type compute_mode, int A_MINUS, int A_TRANS, int C_EXIST>
 __device__ void gemm_MxNxN_core(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_D_ptr, const std::size_t ld_D,
@@ -281,13 +381,23 @@ __device__ void gemm_MxNxN_core(
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_C_ptr, const std::size_t ld_C,
 		const std::size_t m, const std::size_t n
 		) {
-	gemm_MxNxN_core_hmma<compute_mode, A_MINUS, A_TRANS, C_EXIST>(
-			gmem_D_ptr, ld_D,
-			gmem_A_ptr, ld_A,
-			gmem_B_ptr, ld_B,
-			gmem_C_ptr, ld_C,
-			m, n
-			);
+	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_notc) {
+		gemm_MxNxN_core_notc<A_MINUS, A_TRANS, C_EXIST>(
+				gmem_D_ptr, ld_D,
+				gmem_A_ptr, ld_A,
+				gmem_B_ptr, ld_B,
+				gmem_C_ptr, ld_C,
+				m, n
+				);
+	} else {
+		gemm_MxNxN_core_hmma<compute_mode, A_MINUS, A_TRANS, C_EXIST>(
+				gmem_D_ptr, ld_D,
+				gmem_A_ptr, ld_A,
+				gmem_B_ptr, ld_B,
+				gmem_C_ptr, ld_C,
+				m, n
+				);
+	}
 }
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
@@ -542,3 +652,4 @@ MTK_INSTANCE_TSQR(mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor   );
 MTK_INSTANCE_TSQR(mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor   );
 MTK_INSTANCE_TSQR(mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_no_cor);
 MTK_INSTANCE_TSQR(mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor);
+MTK_INSTANCE_TSQR(mtk::tsqr_tc::compute_mode::fp32_notc            );
