@@ -233,6 +233,10 @@ int main() {
 	}
 
 	for (std::size_t lm = min_m_log; lm <= max_m_log; lm++) {
+		test_accuracy<mtk::tsqr_tc::compute_mode::fp32_notc            >(1lu << lm, n, test_count);
+	}
+
+	for (std::size_t lm = min_m_log; lm <= max_m_log; lm++) {
 		test_accuracy_cusolver<float>(1lu << lm, n, test_count);
 	}
 
@@ -251,6 +255,10 @@ int main() {
 
 	for (std::size_t lm = min_m_log; lm <= max_m_log; lm++) {
 		test_performance<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor>(1lu << lm, n, test_count);
+	}
+
+	for (std::size_t lm = min_m_log; lm <= max_m_log; lm++) {
+		//test_performance<mtk::tsqr_tc::compute_mode::fp32_notc            >(1lu << lm, n, test_count);
 	}
 
 	for (std::size_t lm = min_m_log; lm <= max_m_log; lm++) {
