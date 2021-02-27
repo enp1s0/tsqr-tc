@@ -135,5 +135,5 @@ int main() {
 	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_no_cor>(test_m, test_n, batch_size);
 	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor   >(test_m, test_n, batch_size);
 	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor>(test_m, test_n, batch_size);
-	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_notc>            (test_m, test_n, batch_size);
+	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_no_tc           >(test_m, test_n, batch_size);
 }

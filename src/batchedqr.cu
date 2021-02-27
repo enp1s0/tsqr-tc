@@ -122,7 +122,7 @@ __device__ void compute_reflection_0(
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type t 
 		) {
 	MTK_DEBUG_CALL_FUNC(printf("# --> %s\n", __func__));
-	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_notc) {
+	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_no_tc) {
 		compute_reflection_0_notc<smem_m, smem_n, smem_ldm>(smem_reduction_ptr, smem_y_ptr, smem_a_ptr, t);
 	} else {
 		compute_reflection_0_hmma<compute_mode, smem_m, smem_n, smem_ldm>(smem_reduction_ptr, smem_y_ptr, smem_a_ptr, t);
@@ -181,7 +181,7 @@ __device__ void compute_reflection_1(
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_y_ptr
 		) {
 	MTK_DEBUG_CALL_FUNC(printf("# --> %s\n", __func__));
-	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_notc) {
+	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_no_tc) {
 		compute_reflection_1_notc<smem_m, smem_n, smem_ldm>(smem_A_ptr, smem_reduction_ptr, smem_y_ptr);
 	} else {
 		compute_reflection_1_hmma<compute_mode, smem_m, smem_n, smem_ldm>(smem_A_ptr, smem_reduction_ptr, smem_y_ptr);
@@ -278,7 +278,7 @@ __device__ void compute_w(
 		const std::size_t m, const std::size_t n, const std::size_t real_block_n
 		) {
 	MTK_DEBUG_CALL_FUNC(printf("# --> %s\n", __func__));
-	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_notc) {
+	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_no_tc) {
 		compute_w_notc<smem_m, smem_n, smem_ldm>(
 				smem_W_ptr,
 				smem_reduction_ptr,
@@ -446,7 +446,7 @@ __device__ void compute_base_w(
 		const std::size_t real_block_n
 		) {
 	MTK_DEBUG_CALL_FUNC(printf("# --> %s\n", __func__));
-	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_notc) {
+	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_no_tc) {
 		compute_base_w_notc<smem_m, smem_n, smem_ldm>(
 				smem_workspace_large_0_ptr,
 				smem_workspace_large_1_ptr,
@@ -614,7 +614,7 @@ __device__ void update_a(
 		const std::size_t real_block_n
 		) {
 	MTK_DEBUG_CALL_FUNC(printf("# --> %s\n", __func__));
-	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_notc) {
+	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_no_tc) {
 		update_a_notc<smem_m, smem_n, smem_ldm>(
 				smem_workspace_large_0_ptr,
 				smem_workspace_large_1_ptr,
@@ -853,7 +853,7 @@ QR256X128_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor   );
 QR256X128_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor   );
 QR256X128_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_no_cor);
 QR256X128_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor);
-QR256X128_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_notc            );
+QR256X128_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_no_tc           );
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
 void mtk::tsqr_tc::qr256x128_batched(
@@ -896,4 +896,4 @@ QR256X128_BATCHED_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor   );
 QR256X128_BATCHED_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor   );
 QR256X128_BATCHED_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_no_cor);
 QR256X128_BATCHED_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor);
-QR256X128_BATCHED_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_notc            );
+QR256X128_BATCHED_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_no_tc           );

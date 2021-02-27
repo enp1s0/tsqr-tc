@@ -382,7 +382,7 @@ __device__ void gemm_MxNxN_core(
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_C_ptr, const std::size_t ld_C,
 		const std::size_t m, const std::size_t n
 		) {
-	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_notc) {
+	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_no_tc) {
 		gemm_MxNxN_core_notc<A_TRANS, B_MINUS, C_EXIST>(
 				gmem_D_ptr, ld_D,
 				gmem_A_ptr, ld_A,
@@ -653,4 +653,4 @@ MTK_INSTANCE_TSQR(mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor   );
 MTK_INSTANCE_TSQR(mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor   );
 MTK_INSTANCE_TSQR(mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_no_cor);
 MTK_INSTANCE_TSQR(mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor);
-MTK_INSTANCE_TSQR(mtk::tsqr_tc::compute_mode::fp32_notc            );
+MTK_INSTANCE_TSQR(mtk::tsqr_tc::compute_mode::fp32_no_tc           );
