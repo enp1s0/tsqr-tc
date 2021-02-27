@@ -18,6 +18,7 @@ The function compute a QR factorization of a m x n matrix (n <= 128).
 |`fp32_fp16_hmma_no_cor`| HMMA-FP16  | No               |
 |`fp32_tf32_hmma_cor`   | HMMA-TF32  | Yes              |
 |`fp32_tf32_hmma_no_cor`| HMMA-TF32  | No               |
+|`fp32_notc`            | No         | No               |
 
 ## Hou to use
 1. Clone this repository
