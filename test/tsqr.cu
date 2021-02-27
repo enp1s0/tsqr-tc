@@ -66,6 +66,7 @@ void test_accuracy(const std::size_t m, const std::size_t n, const unsigned test
 		CUTF_CHECK_ERROR(cudaDeviceSynchronize());
 
 		auto cublas_handle = cutf::cublas::get_cublas_unique_ptr();
+		cublasSetStream(*cublas_handle.get(), *cuda_stream_uptr.get());
 
 		const auto o = mtk::tsqr_tc::test_utils::compute_orthogonality_in_dp(
 				dQ_uptr.get(), m,

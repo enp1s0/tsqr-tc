@@ -186,7 +186,7 @@ __device__ void copy_matrix_s2g_XPxN(
 	}
 }
 
-template <mtk::tsqr_tc::compute_mode::type compute_mode, int A_MINUS, int A_TRANS, int C_EXIST>
+template <mtk::tsqr_tc::compute_mode::type compute_mode, int A_TRANS, int B_MINUS, int C_EXIST>
 __device__ void gemm_MxNxN_core_hmma(
 		float* const gmem_D_ptr, const std::size_t ld_D,
 		const float* const gmem_A_ptr, const std::size_t ld_A,
@@ -194,7 +194,7 @@ __device__ void gemm_MxNxN_core_hmma(
 		const float* const gmem_C_ptr, const std::size_t ld_C,
 		const std::size_t m, const std::size_t n
 		) {
-	MTK_DEBUG_CALL_FUNC(printf("# ->> %s<%d, %d, %d>(%3lu, %3lu)\n", __func__, A_MINUS, A_TRANS, C_EXIST, m, n));
+	MTK_DEBUG_CALL_FUNC(printf("# ->> %s<A_TRANS = %d, B_MINUS = %d, C_EXIST = %d>(%3lu, %3lu)\n", __func__, A_TRANS, B_MINUS, C_EXIST, m, n));
 	constexpr unsigned block_size = 256;
 	constexpr std::size_t DIM_N = 128;
 	constexpr std::size_t DIM_BLOCK_M = 64;
@@ -207,7 +207,7 @@ __device__ void gemm_MxNxN_core_hmma(
 	float* const smem_A_ptr = smem_B_ptr + DIM_N * DIM_N;
 
 	// Load B
-	copy_B_g2s<block_size, DIM_N, A_MINUS>(
+	copy_B_g2s<block_size, DIM_N, B_MINUS>(
 			smem_B_ptr,
 			gmem_B_ptr, ld_B,
 			n
@@ -271,10 +271,10 @@ __device__ void gemm_MxNxN_core_hmma(
 				);
 		MTK_DEBUG_PRINT_MATRIX(smem_A_ptr, real_m, n, DIM_BLOCK_M, "D block");
 	}
-	MTK_DEBUG_CALL_FUNC(printf("# -<< %s<%d, %d, %d>\n", __func__, A_MINUS, A_TRANS, C_EXIST));
+	MTK_DEBUG_CALL_FUNC(printf("# -<< %s<%d, %d, %d>\n", __func__, A_TRANS, B_MINUS, C_EXIST));
 }
 
-template <int A_MINUS, int A_TRANS, int C_EXIST>
+template <int A_TRANS, int B_MINUS, int C_EXIST>
 __device__ void gemm_MxNxN_core_notc(
 		float* const gmem_D_ptr, const std::size_t ld_D,
 		const float* const gmem_A_ptr, const std::size_t ld_A,
@@ -282,7 +282,7 @@ __device__ void gemm_MxNxN_core_notc(
 		const float* const gmem_C_ptr, const std::size_t ld_C,
 		const std::size_t m, const std::size_t n
 		) {
-	MTK_DEBUG_CALL_FUNC(printf("# ->> %s<%d, %d, %d>(%3lu, %3lu)\n", __func__, A_MINUS, A_TRANS, C_EXIST, m, n));
+	MTK_DEBUG_CALL_FUNC(printf("# ->> %s<A_TRANS = %d, B_MINUS = %d, C_EXIST = %d>(%3lu, %3lu)\n", __func__, A_TRANS, B_MINUS, C_EXIST, m, n));
 	constexpr unsigned block_size = 256;
 	constexpr std::size_t DIM_N = 128;
 	constexpr std::size_t DIM_BLOCK_M = 64;
@@ -293,16 +293,16 @@ __device__ void gemm_MxNxN_core_notc(
 	float* const smem_A_ptr = smem_B_ptr + DIM_N * DIM_N;
 
 	// Load B
-	copy_B_g2s<block_size, DIM_N, A_MINUS>(
+	copy_B_g2s<block_size, DIM_N, B_MINUS>(
 			smem_B_ptr,
 			gmem_B_ptr, ld_B,
 			n
 			);
 	MTK_DEBUG_PRINT_MATRIX(smem_B_ptr, n, n, DIM_N, "B");
+	MTK_DEBUG_PRINT_MATRIX(gmem_A_ptr, m, n, ld_A, "GMEM_A");
 	__syncthreads();
 	for (std::size_t bm = 0; bm < m; bm += DIM_BLOCK_M) {
 		const auto real_m = min(DIM_BLOCK_M, m - bm);
-		MTK_DEBUG_PRINT_MATRIX(gmem_A_ptr, m, n, ld_A, "GMEM_A");
 		if constexpr (A_TRANS == 0) {
 			copy_matrix_g2s_XPxN<block_size, DIM_BLOCK_M, DIM_N, A_TRANS>(
 					smem_A_ptr,
@@ -359,6 +359,7 @@ __device__ void gemm_MxNxN_core_notc(
 			for (unsigned i = 0; i < DIM_TC; i++) {
 				for (unsigned j = 0; j < DIM_BLOCK_M; j += warp_size) {
 					smem_A_ptr[cutf::thread::get_warp_id() * DIM_BLOCK_M * DIM_TC + j + (threadIdx.x & 0x1f) + i * DIM_BLOCK_M] = reg[i * DIM_BLOCK_M / warp_size + j / warp_size];
+					const auto index = cutf::thread::get_warp_id() * DIM_BLOCK_M * DIM_TC + j + (threadIdx.x & 0x1f) + i * DIM_BLOCK_M;
 				}
 			}
 		}
@@ -373,7 +374,7 @@ __device__ void gemm_MxNxN_core_notc(
 	MTK_DEBUG_CALL_FUNC(printf("# -<< %s<%d, %d, %d>\n", __func__, A_MINUS, A_TRANS, C_EXIST));
 }
 
-template <mtk::tsqr_tc::compute_mode::type compute_mode, int A_MINUS, int A_TRANS, int C_EXIST>
+template <mtk::tsqr_tc::compute_mode::type compute_mode, int A_TRANS, int B_MINUS, int C_EXIST>
 __device__ void gemm_MxNxN_core(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_D_ptr, const std::size_t ld_D,
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const gmem_A_ptr, const std::size_t ld_A,
@@ -382,7 +383,7 @@ __device__ void gemm_MxNxN_core(
 		const std::size_t m, const std::size_t n
 		) {
 	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_notc) {
-		gemm_MxNxN_core_notc<A_MINUS, A_TRANS, C_EXIST>(
+		gemm_MxNxN_core_notc<A_TRANS, B_MINUS, C_EXIST>(
 				gmem_D_ptr, ld_D,
 				gmem_A_ptr, ld_A,
 				gmem_B_ptr, ld_B,
@@ -390,7 +391,7 @@ __device__ void gemm_MxNxN_core(
 				m, n
 				);
 	} else {
-		gemm_MxNxN_core_hmma<compute_mode, A_MINUS, A_TRANS, C_EXIST>(
+		gemm_MxNxN_core_hmma<compute_mode, A_TRANS, B_MINUS, C_EXIST>(
 				gmem_D_ptr, ld_D,
 				gmem_A_ptr, ld_A,
 				gmem_B_ptr, ld_B,
@@ -424,7 +425,7 @@ __global__ void tsqr_backward_kernel(
 	MTK_CLOCK_BREAKDOWN_INIT(3);
 
 	MTK_CLOCK_BREAKDOWN_RECORD(0);
-	gemm_MxNxN_core<compute_mode, 0, 1, 0>(
+	gemm_MxNxN_core<compute_mode, 1, 0, 0>(
 			working_memory_ptr, n,
 			g_Y_ptr, ld_Y,
 			g_IN_Q_ptr, ld_IN_Q,
@@ -433,7 +434,7 @@ __global__ void tsqr_backward_kernel(
 			);
 	MTK_CLOCK_BREAKDOWN_RECORD(1);
 	__syncthreads();
-	gemm_MxNxN_core<compute_mode, 1, 0, 1>(
+	gemm_MxNxN_core<compute_mode, 0, 1, 1>(
 			g_OUT_Q_ptr, ld_OUT_Q,
 			g_W_ptr, ld_W,
 			working_memory_ptr, n,
