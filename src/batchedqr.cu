@@ -5,6 +5,7 @@
 #include <cutf/thread.hpp>
 #include <wmma_extension/wmma_extension.hpp>
 #include <wmma_extension/hmma_f32_f32.hpp>
+#include <gemm_core/gemm_core.hpp>
 
 #include <tsqr_tc/batchedqr.hpp>
 #include "utils.hpp"
@@ -89,6 +90,30 @@ __device__ void compute_reflection_0_hmma(
 	MTK_DEBUG_PRINT_MATRIX(smem_reduction, 1, smem_m, 1, "tmp (accumulated)");
 }
 
+template <unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
+__device__ void compute_reflection_0_notc(
+		float* const smem_reduction,
+		const float* const smem_y,
+		const float* const smem_A,
+		const float t
+		) {
+	constexpr unsigned frag_dim = warp_size;
+	__syncthreads();
+	mtk::gemm_core::gevm_core16x16<frag_dim, false>(
+			smem_reduction + smem_n * (threadIdx.x >> 5),
+			smem_y + (threadIdx.x & 0xffffffe0u),
+			smem_A + (threadIdx.x & 0xffffffe0u),
+			smem_ldm, threadIdx.x & 0x1f);
+	if ((threadIdx.x & 0xf) < smem_n) {
+		*(smem_reduction + smem_n * (threadIdx.x >> 5) + (threadIdx.x & 0xf)) *= -t;
+	}
+	// Accumulate
+	__syncthreads();
+	MTK_DEBUG_PRINT_MATRIX(smem_reduction, 1, smem_m, 1, "tmp (before accumulating)");
+	mtk::tsqr_tc::utils::accumulate_vectors<smem_m>(smem_reduction, smem_n);
+	MTK_DEBUG_PRINT_MATRIX(smem_reduction, 1, smem_m, 1, "tmp (accumulated)");
+}
+
 template <mtk::tsqr_tc::compute_mode::type compute_mode, unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
 __device__ void compute_reflection_0(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_reduction_ptr,
@@ -97,7 +122,11 @@ __device__ void compute_reflection_0(
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type t 
 		) {
 	MTK_DEBUG_CALL_FUNC(printf("# --> %s\n", __func__));
-	compute_reflection_0_hmma<compute_mode, smem_m, smem_n, smem_ldm>(smem_reduction_ptr, smem_y_ptr, smem_a_ptr, t);
+	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_no_tc) {
+		compute_reflection_0_notc<smem_m, smem_n, smem_ldm>(smem_reduction_ptr, smem_y_ptr, smem_a_ptr, t);
+	} else {
+		compute_reflection_0_hmma<compute_mode, smem_m, smem_n, smem_ldm>(smem_reduction_ptr, smem_y_ptr, smem_a_ptr, t);
+	}
 	MTK_DEBUG_CALL_FUNC(printf("# <-- %s\n", __func__));
 }
 
@@ -134,6 +163,17 @@ __device__ void compute_reflection_1_hmma(
 	}
 }
 
+template <unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
+__device__ void compute_reflection_1_notc(
+		float* const smem_A_ptr,
+		float* const smem_reduction_ptr,
+		const float* const smem_y_ptr
+		) {
+	for (unsigned i = 0; i < smem_n; i++) {
+		smem_A_ptr[i * smem_ldm + threadIdx.x] += smem_y_ptr[threadIdx.x] * smem_reduction_ptr[i];
+	}
+}
+
 template <mtk::tsqr_tc::compute_mode::type compute_mode, unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
 __device__ void compute_reflection_1(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_A_ptr,
@@ -141,7 +181,11 @@ __device__ void compute_reflection_1(
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_y_ptr
 		) {
 	MTK_DEBUG_CALL_FUNC(printf("# --> %s\n", __func__));
-	compute_reflection_1_hmma<compute_mode, smem_m, smem_n, smem_ldm>(smem_A_ptr, smem_reduction_ptr, smem_y_ptr);
+	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_no_tc) {
+		compute_reflection_1_notc<smem_m, smem_n, smem_ldm>(smem_A_ptr, smem_reduction_ptr, smem_y_ptr);
+	} else {
+		compute_reflection_1_hmma<compute_mode, smem_m, smem_n, smem_ldm>(smem_A_ptr, smem_reduction_ptr, smem_y_ptr);
+	}
 	MTK_DEBUG_CALL_FUNC(printf("# <-- %s\n", __func__));
 }
 
@@ -188,6 +232,43 @@ __device__ void compute_w_hmma(
 	}
 }
 
+template <unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
+__device__ void compute_w_notc(
+		float* const smem_W_ptr,
+		float* const smem_reduction_ptr,
+		const float* const smem_Y_ptr,
+		const float* const smem_t_ptr,
+		const std::size_t m, const std::size_t n, const std::size_t real_block_n
+		) {
+	constexpr unsigned frag_dim = warp_size;
+	// Compute YtY
+
+	mtk::gemm_core::gemm_core16x16<frag_dim, 'T', 'N'>(
+			1.0f,
+			smem_Y_ptr + (threadIdx.x & 0xffffffe0u), smem_ldm,
+			smem_Y_ptr + (threadIdx.x & 0xffffffe0u), smem_ldm,
+			0.0f,
+			smem_reduction_ptr + (threadIdx.x / warp_size) * smem_n * smem_n, smem_n
+			);
+
+	// Accumulate
+	__syncthreads();
+	mtk::tsqr_tc::utils::accumulate_vectors<smem_m>(smem_reduction_ptr, smem_n * smem_n);
+	MTK_DEBUG_PRINT_MATRIX(smem_reduction_ptr, smem_n, smem_n, smem_n, "YtY");
+
+	// Compute W
+	if (threadIdx.x < m) {
+		for (std::size_t tn = 1; tn < real_block_n; tn++) {
+			const auto t = smem_t_ptr[tn];
+			float v = 0;
+			for (std::size_t sn = 0; sn < tn; sn++) {
+				v += smem_W_ptr[sn * smem_ldm + threadIdx.x] * t * smem_reduction_ptr[sn * smem_n + tn];
+			}
+			smem_W_ptr[tn * smem_ldm + threadIdx.x] += -v;
+		}
+	}
+}
+
 template <mtk::tsqr_tc::compute_mode::type compute_mode, unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
 __device__ void compute_w(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_W_ptr,
@@ -197,13 +278,23 @@ __device__ void compute_w(
 		const std::size_t m, const std::size_t n, const std::size_t real_block_n
 		) {
 	MTK_DEBUG_CALL_FUNC(printf("# --> %s\n", __func__));
-	compute_w_hmma<compute_mode, smem_m, smem_n, smem_ldm>(
-			smem_W_ptr,
-			smem_reduction_ptr,
-			smem_Y_ptr,
-			smem_t_ptr,
-			m, n, real_block_n
-			);
+	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_no_tc) {
+		compute_w_notc<smem_m, smem_n, smem_ldm>(
+				smem_W_ptr,
+				smem_reduction_ptr,
+				smem_Y_ptr,
+				smem_t_ptr,
+				m, n, real_block_n
+				);
+	} else {
+		compute_w_hmma<compute_mode, smem_m, smem_n, smem_ldm>(
+				smem_W_ptr,
+				smem_reduction_ptr,
+				smem_Y_ptr,
+				smem_t_ptr,
+				m, n, real_block_n
+				);
+	}
 	MTK_DEBUG_CALL_FUNC(printf("# <-- %s\n", __func__));
 }
 
@@ -279,6 +370,69 @@ __device__ void compute_base_w_hmma(
 	__syncthreads();
 }
 
+template <unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
+__device__ void compute_base_w_notc(
+		float* const smem_workspace_large_0_ptr,
+		float* const smem_workspace_large_1_ptr,
+		float* const smem_workspace_large_2_ptr,
+		float* const smem_workspace_small_ptr,
+		const float* const smem_t_ptr,
+		const float* const gmem_W_ptr, const std::size_t ldW,
+		const float* const gmem_Y_ptr, const std::size_t ldY,
+		const std::size_t m, const std::size_t n,
+		const std::size_t real_block_n
+		) {
+	constexpr unsigned frag_dim = warp_size;
+
+	if (n == 0) {
+		for (std::size_t i = 0; i < real_block_n; i++) {
+			smem_workspace_large_1_ptr[threadIdx.x + i * smem_ldm] = smem_t_ptr[i] * smem_workspace_large_0_ptr[threadIdx.x + i * smem_ldm];
+		}
+		return;
+	}
+	{
+		// Compute YY <- Yg^t * Ys
+		for (std::size_t bn = 0; bn < n; bn += smem_n) {
+			mtk::tsqr_tc::utils::copy_matrix_g2s<smem_m, smem_n, smem_ldm>(smem_workspace_large_1_ptr, gmem_Y_ptr + bn * ldY, ldY, m, smem_n);
+			mtk::gemm_core::gemm_core16x16<frag_dim, 'T', 'N'>(
+					-1.0f,
+					smem_workspace_large_1_ptr + (threadIdx.x & 0xffffffe0u), smem_ldm,
+					smem_workspace_large_0_ptr + (threadIdx.x & 0xffffffe0u), smem_ldm,
+					0.0f,
+					smem_workspace_small_ptr + (threadIdx.x / warp_size) * smem_n * smem_n, smem_n
+					);
+
+			// Accumulate
+			__syncthreads();
+			mtk::tsqr_tc::utils::accumulate_vectors<smem_m>(smem_workspace_large_2_ptr + bn * smem_n, smem_workspace_small_ptr, smem_n * smem_n);
+			MTK_DEBUG_CALL_FUNC(printf("base YtY (%lu/%lu)\n", bn + 1, n));
+			MTK_DEBUG_PRINT_MATRIX(smem_workspace_large_2_ptr + bn * smem_n, smem_n, smem_n, smem_n, "");
+		}
+	}
+
+	// Compute Ws <- Ys - Wg * YY
+	float reg[frag_dim * smem_n / warp_size];
+	for (unsigned i = 0; i < smem_n; i++) {
+		reg[i] = 0.0f;
+	}
+	for (std::size_t bn = 0; bn < n; bn += smem_n) {
+		mtk::tsqr_tc::utils::copy_matrix_g2s<smem_m, smem_n, smem_ldm>(smem_workspace_large_1_ptr, gmem_W_ptr + bn * ldW, ldW, m, smem_n);
+		for (unsigned i = 0; i < smem_n; i++) {
+			for (unsigned k = 0; k < smem_n; k++) {
+				const auto b_v = smem_workspace_large_2_ptr[bn * smem_n + i * smem_n + k];
+				const auto a_v = smem_workspace_large_1_ptr[threadIdx.x + smem_ldm * k];
+				reg[i] += a_v * b_v;
+			}
+		}
+	}
+	if (threadIdx.x < m) {
+		for (unsigned k = 0; k < real_block_n; k++) {
+			smem_workspace_large_1_ptr[threadIdx.x + k * smem_ldm] = smem_t_ptr[k] * (smem_workspace_large_0_ptr[threadIdx.x + k * smem_ldm] + reg[k]);
+		}
+	}
+	__syncthreads();
+}
+
 template <mtk::tsqr_tc::compute_mode::type compute_mode, unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
 __device__ void compute_base_w(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_workspace_large_0_ptr,
@@ -292,16 +446,29 @@ __device__ void compute_base_w(
 		const std::size_t real_block_n
 		) {
 	MTK_DEBUG_CALL_FUNC(printf("# --> %s\n", __func__));
-	compute_base_w_hmma<compute_mode, smem_m, smem_n, smem_ldm>(
-			smem_workspace_large_0_ptr,
-			smem_workspace_large_1_ptr,
-			smem_workspace_large_2_ptr,
-			smem_workspace_small_ptr,
-			smem_t_ptr,
-			gmem_W_ptr, ldW,
-			gmem_Y_ptr, ldY,
-			m, n, real_block_n
-			);
+	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_no_tc) {
+		compute_base_w_notc<smem_m, smem_n, smem_ldm>(
+				smem_workspace_large_0_ptr,
+				smem_workspace_large_1_ptr,
+				smem_workspace_large_2_ptr,
+				smem_workspace_small_ptr,
+				smem_t_ptr,
+				gmem_W_ptr, ldW,
+				gmem_Y_ptr, ldY,
+				m, n, real_block_n
+				);
+	} else {
+		compute_base_w_hmma<compute_mode, smem_m, smem_n, smem_ldm>(
+				smem_workspace_large_0_ptr,
+				smem_workspace_large_1_ptr,
+				smem_workspace_large_2_ptr,
+				smem_workspace_small_ptr,
+				smem_t_ptr,
+				gmem_W_ptr, ldW,
+				gmem_Y_ptr, ldY,
+				m, n, real_block_n
+				);
+	}
 	MTK_DEBUG_CALL_FUNC(printf("# <-- %s\n", __func__));
 }
 
@@ -379,6 +546,62 @@ __device__ void update_a_hmma(
 	__syncthreads();
 }
 
+template <unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
+__device__ void update_a_notc(
+		float* const smem_workspace_large_0_ptr,
+		float* const smem_workspace_large_1_ptr,
+		float* const smem_workspace_large_2_ptr,
+		float* const smem_workspace_small_ptr,
+		const float* const gmem_W_ptr, const std::size_t ldW,
+		const float* const gmem_Y_ptr, const std::size_t ldY,
+		const std::size_t m, const std::size_t n,
+		const std::size_t real_block_n
+		) {
+	constexpr unsigned frag_dim = warp_size;
+	if (n == 0) {
+		return;
+	}
+	{
+		// Compute WtA
+		for (std::size_t bn = 0; bn < n; bn += smem_n) {
+			mtk::tsqr_tc::utils::copy_matrix_g2s<smem_m, smem_n, smem_ldm>(smem_workspace_large_1_ptr, gmem_W_ptr + bn * ldW, ldW, m, smem_n);
+			mtk::gemm_core::gemm_core16x16<frag_dim, 'T', 'N'>(
+					-1.0f,
+					smem_workspace_large_1_ptr + (threadIdx.x & 0xffffffe0u), smem_ldm,
+					smem_workspace_large_0_ptr + (threadIdx.x & 0xffffffe0u), smem_ldm,
+					0.0f,
+					smem_workspace_small_ptr + (threadIdx.x / warp_size) * smem_n * smem_n, smem_n
+					);
+
+			// Accumulate
+			__syncthreads();
+			mtk::tsqr_tc::utils::accumulate_vectors<smem_m>(smem_workspace_large_2_ptr + bn * smem_n, smem_workspace_small_ptr, smem_n * smem_n);
+			MTK_DEBUG_CALL_FUNC(printf("WtA (%lu/%lu)\n", bn + 1, n));
+			MTK_DEBUG_PRINT_MATRIX(smem_workspace_large_2_ptr + bn * smem_n, smem_n, smem_n, smem_n, "");
+		}
+	}
+
+	// Compute As <- As - Yg * WtA
+	float reg[frag_dim * smem_n / warp_size];
+	for (unsigned i = 0; i < smem_n; i++) {
+		reg[i] = 0.0f;
+	}
+	for (std::size_t bn = 0; bn < n; bn += smem_n) {
+		mtk::tsqr_tc::utils::copy_matrix_g2s<smem_m, smem_n, smem_ldm>(smem_workspace_large_1_ptr, gmem_Y_ptr + bn * ldY, ldY, m, smem_n);
+		for (unsigned i = 0; i < smem_n; i++) {
+			for (unsigned k = 0; k < smem_n; k++) {
+				const auto b_v = smem_workspace_large_2_ptr[bn * smem_n + i * smem_n + k];
+				const auto a_v = smem_workspace_large_1_ptr[threadIdx.x + smem_ldm * k];
+				reg[i] += a_v * b_v;
+			}
+		}
+	}
+	for (unsigned k = 0; k < real_block_n; k++) {
+		smem_workspace_large_0_ptr[threadIdx.x + k * smem_ldm] += reg[k];
+	}
+	__syncthreads();
+}
+
 template <mtk::tsqr_tc::compute_mode::type compute_mode, unsigned smem_m, unsigned smem_n, unsigned smem_ldm>
 __device__ void update_a(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_workspace_large_0_ptr,
@@ -391,15 +614,27 @@ __device__ void update_a(
 		const std::size_t real_block_n
 		) {
 	MTK_DEBUG_CALL_FUNC(printf("# --> %s\n", __func__));
-	update_a_hmma<compute_mode, smem_m, smem_n, smem_ldm>(
-			smem_workspace_large_0_ptr,
-			smem_workspace_large_1_ptr,
-			smem_workspace_large_2_ptr,
-			smem_workspace_small_ptr,
-			gmem_W_ptr, ldW,
-			gmem_Y_ptr, ldY,
-			m, n, real_block_n
-			);
+	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_no_tc) {
+		update_a_notc<smem_m, smem_n, smem_ldm>(
+				smem_workspace_large_0_ptr,
+				smem_workspace_large_1_ptr,
+				smem_workspace_large_2_ptr,
+				smem_workspace_small_ptr,
+				gmem_W_ptr, ldW,
+				gmem_Y_ptr, ldY,
+				m, n, real_block_n
+				);
+	} else {
+		update_a_hmma<compute_mode, smem_m, smem_n, smem_ldm>(
+				smem_workspace_large_0_ptr,
+				smem_workspace_large_1_ptr,
+				smem_workspace_large_2_ptr,
+				smem_workspace_small_ptr,
+				gmem_W_ptr, ldW,
+				gmem_Y_ptr, ldY,
+				m, n, real_block_n
+				);
+	}
 	MTK_DEBUG_CALL_FUNC(printf("# <-- %s\n", __func__));
 }
 
@@ -618,6 +853,7 @@ QR256X128_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor   );
 QR256X128_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor   );
 QR256X128_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_no_cor);
 QR256X128_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor);
+QR256X128_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_no_tc           );
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
 void mtk::tsqr_tc::qr256x128_batched(
@@ -660,3 +896,4 @@ QR256X128_BATCHED_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor   );
 QR256X128_BATCHED_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor   );
 QR256X128_BATCHED_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_no_cor);
 QR256X128_BATCHED_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor);
+QR256X128_BATCHED_INSTANCE(mtk::tsqr_tc::compute_mode::fp32_no_tc           );

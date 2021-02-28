@@ -6,8 +6,6 @@ LIBDIR=../lib
 NVCCFLAGS=-std=c++17 -I$(INCDIR) -L$(LIBDIR) -ltsqr-tc -I../src/cutf/include -Xcompiler="-fopenmp" -lcublas -lcusolver
 NVCCFLAGS+=-gencode arch=compute_86,code=sm_86
 NVCCFLAGS+=-gencode arch=compute_80,code=sm_80
-#NVCCFLAGS+=-gencode arch=compute_75,code=sm_75 # Turing is not supported
-NVCCFLAGS+=-gencode arch=compute_70,code=sm_70
 
 TARGET=qr256x256.test tsqr.test
 OBJS=utils.o

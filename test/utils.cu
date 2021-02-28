@@ -51,7 +51,8 @@ double mtk::tsqr_tc::test_utils::compute_residual_in_dp(
 	auto hY_dp_uptr = cutf::memory::get_host_unique_ptr<double>(n * n);
 	auto hA_dp_uptr = cutf::memory::get_host_unique_ptr<double>(m * n);
 	auto hTMP_dp_uptr = cutf::memory::get_host_unique_ptr<double>(n * n);
-	convert_matrix(hR_dp_uptr.get(), m, dR_ptr, ld_R, m, n);
+	for (unsigned i = 0; i < m * n; i++) hR_dp_uptr.get()[i] = 0.0f;
+	convert_matrix(hR_dp_uptr.get(), m, dR_ptr, ld_R, n, n);
 	convert_matrix(hW_dp_uptr.get(), m, dW_ptr, ld_W, m, n);
 	convert_matrix(hY_dp_uptr.get(), n, dY_ptr, ld_Y, n, n);
 	convert_matrix(hA_dp_uptr.get(), m, dA_ptr, ld_A, m, n);

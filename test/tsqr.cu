@@ -66,6 +66,7 @@ void test_accuracy(const std::size_t m, const std::size_t n, const unsigned test
 		CUTF_CHECK_ERROR(cudaDeviceSynchronize());
 
 		auto cublas_handle = cutf::cublas::get_cublas_unique_ptr();
+		cublasSetStream(*cublas_handle.get(), *cuda_stream_uptr.get());
 
 		const auto o = mtk::tsqr_tc::test_utils::compute_orthogonality_in_dp(
 				dQ_uptr.get(), m,
@@ -233,6 +234,10 @@ int main() {
 	}
 
 	for (std::size_t lm = min_m_log; lm <= max_m_log; lm++) {
+		test_accuracy<mtk::tsqr_tc::compute_mode::fp32_no_tc           >(1lu << lm, n, test_count);
+	}
+
+	for (std::size_t lm = min_m_log; lm <= max_m_log; lm++) {
 		test_accuracy_cusolver<float>(1lu << lm, n, test_count);
 	}
 
@@ -251,6 +256,10 @@ int main() {
 
 	for (std::size_t lm = min_m_log; lm <= max_m_log; lm++) {
 		test_performance<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor>(1lu << lm, n, test_count);
+	}
+
+	for (std::size_t lm = min_m_log; lm <= max_m_log; lm++) {
+		test_performance<mtk::tsqr_tc::compute_mode::fp32_no_tc           >(1lu << lm, n, test_count);
 	}
 
 	for (std::size_t lm = min_m_log; lm <= max_m_log; lm++) {

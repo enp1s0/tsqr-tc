@@ -10,6 +10,7 @@ NVCCFLAGS=-std=c++17 -t0
 NVCCFLAGS+=-I./$(SRCDIR)/cutf/include
 NVCCFLAGS+=-I./$(SRCDIR)/wmma_extension/include
 NVCCFLAGS+=-I./$(SRCDIR)/hmma.f32.f32/include
+NVCCFLAGS+=-I./$(SRCDIR)/gemm_core_cuh/include
 NVCCFLAGS+=-gencode arch=compute_86,code=sm_86
 NVCCFLAGS+=-gencode arch=compute_80,code=sm_80
 

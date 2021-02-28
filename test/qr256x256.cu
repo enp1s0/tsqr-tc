@@ -11,6 +11,10 @@
 
 //#define MTK_PRINT_MATRICES
 
+constexpr std::size_t batch_size = 1lu << 12;
+constexpr unsigned test_m = 256;
+constexpr unsigned test_n = 256;
+
 constexpr float rand_abs_max = 1.0f;
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
@@ -127,8 +131,9 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 }
 
 int main() {
-	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor   >(256, 256, 1lu << 12);
-	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_no_cor>(256, 256, 1lu << 12);
-	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor   >(256, 256, 1lu << 12);
-	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor>(256, 256, 1lu << 12);
+	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor   >(test_m, test_n, batch_size);
+	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_no_cor>(test_m, test_n, batch_size);
+	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor   >(test_m, test_n, batch_size);
+	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor>(test_m, test_n, batch_size);
+	test_accuracy<mtk::tsqr_tc::compute_mode::fp32_no_tc           >(test_m, test_n, batch_size);
 }
