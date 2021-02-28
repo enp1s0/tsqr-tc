@@ -519,7 +519,7 @@ void mtk::tsqr_tc::test_utils::test_performance_cublas_bqr(
 
 		average /= test_count;
 
-		std::printf("%u,cusolver,%e\n", batch_size, average);
+		std::printf("%u,cusolver,%e,0\n", batch_size, average);
 	}
 }
 

@@ -60,14 +60,18 @@ void test_performance(const unsigned m, const unsigned n, const unsigned batch_s
 			average += elasped_time;
 		}
 
+		const auto compute_complexity = [](const unsigned m, const unsigned n) -> unsigned {
+			return 4 * m * n * n + 64 * m * n;
+		};
+
 		average /= test_count;
 
-		std::printf("%u,%s,%e\n", batch_size, mtk::tsqr_tc::test_utils::get_mode_name<compute_mode>(), average);
+		std::printf("%u,%s,%e,%e\n", batch_size, mtk::tsqr_tc::test_utils::get_mode_name<compute_mode>(), average, compute_complexity(m, n) * batch_size / average);
 	}
 }
 
 int main() {
-	std::printf("batch_size,mode,time\n");
+	std::printf("batch_size,mode,time,flops\n");
 	test_performance<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor   >(test_m, test_n, batch_size_from, batch_size_to, test_count);
 	test_performance<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_no_cor>(test_m, test_n, batch_size_from, batch_size_to, test_count);
 	test_performance<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor   >(test_m, test_n, batch_size_from, batch_size_to, test_count);
