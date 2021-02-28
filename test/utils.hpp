@@ -65,6 +65,14 @@ void test_performance_cusolver(
 		const std::size_t n,
 		const unsigned test_count
 		);
+
+template <class T>
+void test_performance_cublas_bqr(
+		const std::size_t m, const std::size_t n,
+		const unsigned batch_size_from,
+		const unsigned batch_size_to,
+		const unsigned test_count
+		);
 } // namespace test_utils
 } // namespace tsqr_tc
 } // namespace mtk
