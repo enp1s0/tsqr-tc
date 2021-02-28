@@ -11,7 +11,7 @@
 
 //#define MTK_PRINT_MATRICES
 
-constexpr std::size_t batch_size = 1lu << 12;
+constexpr std::size_t batch_size = 1;
 constexpr unsigned test_m = 256;
 constexpr unsigned test_n = 256;
 
