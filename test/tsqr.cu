@@ -214,8 +214,7 @@ void test_performance(const std::size_t m, const std::size_t n, const unsigned t
 	std::size_t complexity = 0lu;
 	const std::size_t qr_complexity = mtk::tsqr_tc::test_utils::compute_complexity(m / tsqr_buffer.get_split_count(), n);
 	const std::size_t gemm_complexity = 6 * 128 * 128 * 128;
-	for (unsigned i = 0; i < tsqr_buffer.get_split_count(); i++) {
-		const auto bs = (1lu << i);
+	for (unsigned bs = 1; bs <= tsqr_buffer.get_split_count(); bs <<= 1) {
 		complexity += qr_complexity * bs;
 		complexity += gemm_complexity * bs;
 	}
