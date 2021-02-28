@@ -73,6 +73,11 @@ void test_performance_cublas_bqr(
 		const unsigned batch_size_to,
 		const unsigned test_count
 		);
+
+
+inline std::size_t compute_complexity(const std::size_t m, const std::size_t n) {
+	return 4 * m * n * n + 64 * m * n;
+};
 } // namespace test_utils
 } // namespace tsqr_tc
 } // namespace mtk
