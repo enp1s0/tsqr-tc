@@ -11,7 +11,7 @@
 
 //#define MTK_PRINT_MATRICES
 
-constexpr std::size_t batch_size = 1lu << 12;
+constexpr std::size_t batch_size = 1;
 constexpr unsigned test_m = 256;
 constexpr unsigned test_n = 256;
 
@@ -67,10 +67,7 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 	const auto end_clock = std::chrono::high_resolution_clock::now();
 	const auto elapsed_time = std::chrono::duration_cast<std::chrono::nanoseconds>(end_clock - start_clock).count() * 1e-9;
 	std::printf("%20s : %e [s]\n", "time", elapsed_time);
-	const auto compute_complexity = [](const unsigned m, const unsigned n) -> unsigned {
-		return 4 * m * n * n + 64 * m * n;
-	};
-	std::printf("%20s : %e [TFlop/s]\n", "performance", compute_complexity(m, n) * batch_size / elapsed_time / 1e12);
+	std::printf("%20s : %e [TFlop/s]\n", "performance", mtk::tsqr_tc::test_utils::compute_complexity(m, n) * batch_size / elapsed_time / 1e12);
 
 	cutf::memory::copy(hR_uptr.get(), dR_uptr.get(), n * n * batch_size);
 	cutf::memory::copy(hW_uptr.get(), dW_uptr.get(), m * n * batch_size);

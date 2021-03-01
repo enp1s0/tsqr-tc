@@ -454,9 +454,73 @@ void mtk::tsqr_tc::test_utils::test_performance_cusolver(const std::size_t m, co
 
 	const double elapsed_time = std::chrono::duration_cast<std::chrono::microseconds>(end_clock - start_clock).count() * 1e-6 / test_count;
 
-	std::printf("%lu,%lu,cusolver,%e,%d\n", m, n, elapsed_time, std::max(geqrf_working_memory_size, gqr_working_memory_size) * sizeof(T));
+	std::printf("%lu,%lu,cusolver,%e,0,%lu\n", m, n, elapsed_time, std::max(geqrf_working_memory_size, gqr_working_memory_size) * sizeof(T));
 	std::fflush(stdout);
 }
 
 template
 void mtk::tsqr_tc::test_utils::test_performance_cusolver<float >(const std::size_t, const std::size_t, const unsigned);
+
+
+template <class T>
+void mtk::tsqr_tc::test_utils::test_performance_cublas_bqr(
+		const std::size_t m, const std::size_t n,
+		const unsigned batch_size_from,
+		const unsigned batch_size_to,
+		const unsigned test_count
+		) {
+	std::mt19937 mt(std::random_device{}());
+	std::uniform_real_distribution<T> dist(-1., 1.);
+
+	auto da_uptr = cutf::memory::get_device_unique_ptr<T>(m * n * batch_size_to);
+	auto ha_uptr = cutf::memory::get_host_unique_ptr<T>  (m * n * batch_size_to);
+	auto dt_uptr = cutf::memory::get_device_unique_ptr<T>(    n * batch_size_to);
+	auto ht_uptr = cutf::memory::get_host_unique_ptr<T>  (    n * batch_size_to);
+
+	auto dia_uptr = cutf::memory::get_device_unique_ptr<T*>(batch_size_to);
+	auto hia_uptr = cutf::memory::get_host_unique_ptr<T*>  (batch_size_to);
+	auto dit_uptr = cutf::memory::get_device_unique_ptr<T*>(batch_size_to);
+	auto hit_uptr = cutf::memory::get_host_unique_ptr<T*>  (batch_size_to);
+
+	auto cublas_handle = cutf::cublas::get_cublas_unique_ptr();
+
+	for (unsigned batch_size = batch_size_from; batch_size <= batch_size_to; batch_size <<= 1) {
+		double average = 0.0;
+		for (unsigned c = 0; c < test_count; c++) {
+			for (unsigned i = 0; i < m * n * batch_size; i++) {
+				ha_uptr.get()[i] = dist(mt);
+			}
+			cutf::memory::copy(da_uptr.get(), ha_uptr.get(), m * n * batch_size);
+			for (unsigned i = 0; i < batch_size; i++) {
+				hia_uptr.get()[i] = da_uptr.get() + i * m;
+				hit_uptr.get()[i] = dt_uptr.get() + i * n;
+			}
+			cutf::memory::copy(dia_uptr.get(), hia_uptr.get(), batch_size);
+			cutf::memory::copy(dit_uptr.get(), hit_uptr.get(), batch_size);
+
+			auto start_clock = std::chrono::high_resolution_clock::now();
+
+			int info;
+			CUTF_CHECK_ERROR(cutf::cublas::geqrf_batched(
+						*cublas_handle.get(),
+						m, n,
+						dia_uptr.get(), m * batch_size,
+						dit_uptr.get(),
+						&info,
+						batch_size
+						));
+			CUTF_CHECK_ERROR(cudaDeviceSynchronize());
+
+			auto end_clock = std::chrono::high_resolution_clock::now();
+
+			const auto elasped_time = std::chrono::duration_cast<std::chrono::microseconds>(end_clock - start_clock).count() * 1e-6;
+			average += elasped_time;
+		}
+
+		average /= test_count;
+
+		std::printf("%u,cusolver,%e,0\n", batch_size, average);
+	}
+}
+
+template void mtk::tsqr_tc::test_utils::test_performance_cublas_bqr<float >(const std::size_t, const std::size_t, const unsigned, const unsigned, const unsigned);

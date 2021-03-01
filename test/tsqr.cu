@@ -211,7 +211,15 @@ void test_performance(const std::size_t m, const std::size_t n, const unsigned t
 
 	const double elapsed_time = std::chrono::duration_cast<std::chrono::microseconds>(end_clock - start_clock).count() * 1e-6 / test_count;
 
-	std::printf("%lu,%lu,%s,%e,%lu\n", m, n, mtk::tsqr_tc::test_utils::get_mode_name<compute_mode>(), elapsed_time, tsqr_buffer.get_buffer_size());
+	std::size_t complexity = 0lu;
+	const std::size_t qr_complexity = mtk::tsqr_tc::test_utils::compute_complexity(m / tsqr_buffer.get_split_count(), n);
+	const std::size_t gemm_complexity = 6 * 128 * 128 * 128;
+	for (unsigned bs = 1; bs <= tsqr_buffer.get_split_count(); bs <<= 1) {
+		complexity += qr_complexity * bs;
+		complexity += gemm_complexity * bs;
+	}
+
+	std::printf("%lu,%lu,%s,%e,%e,%lu\n", m, n, mtk::tsqr_tc::test_utils::get_mode_name<compute_mode>(), elapsed_time, complexity / elapsed_time, tsqr_buffer.get_buffer_size());
 	std::fflush(stdout);
 }
 
@@ -241,7 +249,7 @@ int main() {
 		test_accuracy_cusolver<float>(1lu << lm, n, test_count);
 	}
 
-	std::printf("m,n,mode,time,buffer_size\n");
+	std::printf("m,n,mode,time,performance,buffer_size\n");
 	for (std::size_t lm = min_m_log; lm <= max_m_log; lm++) {
 		test_performance<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor>(1lu << lm, n, test_count);
 	}
