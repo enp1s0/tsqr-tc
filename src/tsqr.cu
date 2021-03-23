@@ -215,7 +215,7 @@ __device__ void gemm_MxNxN_core_hmma(
 	MTK_DEBUG_PRINT_MATRIX(smem_B_ptr, n, n, DIM_N, "B");
 	__syncthreads();
 	for (std::size_t bm = 0; bm < m; bm += DIM_BLOCK_M) {
-		typename mtk::tsqr_tc::utils::select_fragemnt<compute_mode, nvcuda::wmma::accumulator, DIM_BLOCK_M / DIM_TC * DIM_TC, DIM_TC, NUM_BLOCKINGS * DIM_TC>::type frag_C;
+		typename mtk::tsqr_tc::utils::select_fragment<compute_mode, nvcuda::wmma::accumulator, DIM_BLOCK_M / DIM_TC * DIM_TC, DIM_TC, NUM_BLOCKINGS * DIM_TC>::type frag_C;
 		if constexpr (C_EXIST) {
 			// We use n x n size of matrix C in TSQR even if the size of D is 2n x n.
 			if (bm < n) {
@@ -254,10 +254,10 @@ __device__ void gemm_MxNxN_core_hmma(
 		__syncthreads();
 		for (auto bk = decltype(DIM_N)(0); bk < DIM_N; bk += K_BLOCKING) {
 			const auto real_num_blockings = min(NUM_BLOCKINGS, (n - bk + DIM_TC - 1) / DIM_TC);
-			typename mtk::tsqr_tc::utils::select_fragemnt<compute_mode, nvcuda::wmma::matrix_b, DIM_BLOCK_M / DIM_TC * DIM_TC, DIM_TC, NUM_BLOCKINGS * DIM_TC, nvcuda::wmma::col_major>::type frag_B;
+			typename mtk::tsqr_tc::utils::select_fragment<compute_mode, nvcuda::wmma::matrix_b, DIM_BLOCK_M / DIM_TC * DIM_TC, DIM_TC, NUM_BLOCKINGS * DIM_TC, nvcuda::wmma::col_major>::type frag_B;
 			mtk::wmma::load_matrix_sync(frag_B, smem_B_ptr + cutf::thread::get_warp_id() * DIM_N * DIM_TC + bk, DIM_N);
 
-			typename mtk::tsqr_tc::utils::select_fragemnt<compute_mode, nvcuda::wmma::matrix_a, DIM_BLOCK_M / DIM_TC * DIM_TC, DIM_TC, NUM_BLOCKINGS * DIM_TC, nvcuda::wmma::col_major>::type frag_A;
+			typename mtk::tsqr_tc::utils::select_fragment<compute_mode, nvcuda::wmma::matrix_a, DIM_BLOCK_M / DIM_TC * DIM_TC, DIM_TC, NUM_BLOCKINGS * DIM_TC, nvcuda::wmma::col_major>::type frag_A;
 			mtk::wmma::load_matrix_sync(frag_A, smem_A_ptr + bk * DIM_BLOCK_M, DIM_BLOCK_M);
 			mtk::wmma::mma_sync(frag_C, frag_A, frag_B, frag_C);
 		}

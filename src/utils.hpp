@@ -30,7 +30,7 @@ template <> constexpr unsigned min_fragment_n<mtk::tsqr_tc::compute_mode::fp32_t
 template <> constexpr unsigned min_fragment_n<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor> = 16;
 
 template <mtk::tsqr_tc::compute_mode::type compute_type, class Use, unsigned m, unsigned n, unsigned k, class Layout = void>
-struct select_fragemnt {
+struct select_fragment {
 	using ftype = typename mtk::tsqr_tc::utils::fragment_type<compute_type>::type;
 	using error_correction = typename mtk::tsqr_tc::utils::error_correction_type<compute_type>::type;
 	using policy = typename mtk::wmma::detail::default_policy<ftype, error_correction, mtk::wmma::op_wmma>::type;
