@@ -10,6 +10,9 @@ The function compute a QR factorization of a m x n matrix (n <= 128).
 - C++ >= 17 (This library uses `if constexpr`)
 - CUDA >= 11.2
 
+## Presentation
+- Hiroyuki Ootomo, Rio Yokota, "TSQR on TensorCores with error correction", SIAM CSE'21 [[slide]](https://static.momo86.net/f/1/cse21-slide)
+
 ## Supported computation mode
 
 |  Mode name            | TensorCore | Error correction |
