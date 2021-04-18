@@ -228,12 +228,12 @@ __device__ void gemm_MxNxN_core_hmma(
 				MTK_DEBUG_PRINT_MATRIX(smem_A_ptr, DIM_BLOCK_M, n, DIM_BLOCK_M, "C");
 				__syncthreads();
 				auto load_ptr = smem_A_ptr + DIM_BLOCK_M * DIM_TC * cutf::thread::get_warp_id();
-				mtk::wmma::load_matrix_sync(frag_C, load_ptr, DIM_BLOCK_M, nvcuda::wmma::mem_col_major);
+				mtk::wmma::mma_f32::load_matrix_sync(frag_C, load_ptr, DIM_BLOCK_M, nvcuda::wmma::mem_col_major);
 			} else {
-				mtk::wmma::fill_zero(frag_C);
+				mtk::wmma::mma_f32::fill_zero(frag_C);
 			}
 		} else {
-			mtk::wmma::fill_zero(frag_C);
+			mtk::wmma::mma_f32::fill_zero(frag_C);
 		}
 		const auto real_m = min(DIM_BLOCK_M, m - bm);
 		MTK_DEBUG_PRINT_MATRIX(gmem_A_ptr, m, n, ld_A, "GMEM_A");
@@ -255,14 +255,14 @@ __device__ void gemm_MxNxN_core_hmma(
 		for (auto bk = decltype(DIM_N)(0); bk < DIM_N; bk += K_BLOCKING) {
 			const auto real_num_blockings = min(NUM_BLOCKINGS, (n - bk + DIM_TC - 1) / DIM_TC);
 			typename mtk::tsqr_tc::utils::select_fragment<compute_mode, nvcuda::wmma::matrix_b, DIM_BLOCK_M / DIM_TC * DIM_TC, DIM_TC, NUM_BLOCKINGS * DIM_TC, nvcuda::wmma::col_major>::type frag_B;
-			mtk::wmma::load_matrix_sync(frag_B, smem_B_ptr + cutf::thread::get_warp_id() * DIM_N * DIM_TC + bk, DIM_N);
+			mtk::wmma::mma_f32::load_matrix_sync(frag_B, smem_B_ptr + cutf::thread::get_warp_id() * DIM_N * DIM_TC + bk, DIM_N);
 
 			typename mtk::tsqr_tc::utils::select_fragment<compute_mode, nvcuda::wmma::matrix_a, DIM_BLOCK_M / DIM_TC * DIM_TC, DIM_TC, NUM_BLOCKINGS * DIM_TC, nvcuda::wmma::col_major>::type frag_A;
-			mtk::wmma::load_matrix_sync(frag_A, smem_A_ptr + bk * DIM_BLOCK_M, DIM_BLOCK_M);
-			mtk::wmma::mma_sync(frag_C, frag_A, frag_B, frag_C);
+			mtk::wmma::mma_f32::load_matrix_sync(frag_A, smem_A_ptr + bk * DIM_BLOCK_M, DIM_BLOCK_M);
+			mtk::wmma::mma_f32::mma_sync(frag_C, frag_A, frag_B, frag_C);
 		}
 		__syncthreads();
-		mtk::wmma::store_matrix_sync(smem_A_ptr + DIM_BLOCK_M * DIM_TC * cutf::thread::get_warp_id(), frag_C, DIM_BLOCK_M, nvcuda::wmma::mem_col_major);
+		mtk::wmma::mma_f32::store_matrix_sync(smem_A_ptr + DIM_BLOCK_M * DIM_TC * cutf::thread::get_warp_id(), frag_C, DIM_BLOCK_M, nvcuda::wmma::mem_col_major);
 		__syncthreads();
 		copy_matrix_s2g_XPxN<block_size, DIM_BLOCK_M, DIM_N>(
 				gmem_D_ptr + bm, ld_D,

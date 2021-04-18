@@ -17,10 +17,10 @@ template <> struct fragment_type<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_c
 
 template <mtk::tsqr_tc::compute_mode::type compute_type>
 struct error_correction_type;
-template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor   > {using type = mtk::wmma::op_with_error_correction;};
-template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_no_cor> {using type = mtk::wmma::op_without_error_correction;};
-template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor   > {using type = mtk::wmma::op_with_error_correction;};
-template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor> {using type = mtk::wmma::op_without_error_correction;};
+template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor   > {using type = mtk::wmma::mma_f32::op_with_error_correction;};
+template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_no_cor> {using type = mtk::wmma::mma_f32::op_without_error_correction;};
+template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor   > {using type = mtk::wmma::mma_f32::op_with_error_correction;};
+template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor> {using type = mtk::wmma::mma_f32::op_without_error_correction;};
 
 template <mtk::tsqr_tc::compute_mode::type compute_type>
 constexpr unsigned min_fragment_n = 16;
@@ -33,9 +33,9 @@ template <mtk::tsqr_tc::compute_mode::type compute_type, class Use, unsigned m, 
 struct select_fragment {
 	using ftype = typename mtk::tsqr_tc::utils::fragment_type<compute_type>::type;
 	using error_correction = typename mtk::tsqr_tc::utils::error_correction_type<compute_type>::type;
-	using policy = typename mtk::wmma::detail::default_policy<ftype, error_correction, mtk::wmma::op_wmma>::type;
+	using policy = typename mtk::wmma::mma_f32::detail::default_policy<ftype, error_correction, mtk::wmma::mma_f32::op_wmma>::type;
 	// fragment type
-	using type = mtk::wmma::fragment_f32<Use, m, n, k, ftype, Layout, policy>;
+	using type = mtk::wmma::mma_f32::fragment<Use, m, n, k, ftype, Layout, policy>;
 };
 
 // This function accumulates vectors on shared memory.
