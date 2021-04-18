@@ -63,6 +63,7 @@ void test_performance(const unsigned m, const unsigned n, const unsigned batch_s
 		average /= test_count;
 
 		std::printf("%u,%s,%e,%e\n", batch_size, mtk::tsqr_tc::test_utils::get_mode_name<compute_mode>(), average, mtk::tsqr_tc::test_utils::compute_complexity(m, n) * batch_size / average);
+		std::fflush(stdout);
 	}
 }
 

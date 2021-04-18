@@ -125,6 +125,7 @@ void test_accuracy(const unsigned m, const unsigned n, const std::size_t batch_s
 	orthogonality /= batch_size;
 	std::printf("%20s : %e\n", "residual", residual);
 	std::printf("%20s : %e\n", "orthogonality", orthogonality);
+	std::fflush(stdout);
 }
 
 int main() {
