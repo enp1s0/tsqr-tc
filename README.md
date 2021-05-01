@@ -9,6 +9,7 @@ The function compute a QR factorization of a m x n matrix (n <= 128).
 ## Requirements
 - C++ >= 17 (This library uses `if constexpr`)
 - CUDA >= 11.2
+- CMake >= 3.18
 
 ## Presentation
 - Hiroyuki Ootomo, Rio Yokota, "TSQR on TensorCores with error correction", SIAM CSE'21 [[slide]](https://static.momo86.net/f/1/cse21-slide)
@@ -33,12 +34,17 @@ git submodule update --init --recursive
 
 2. Build the library
 ```bash
+mkdir build
+cd build
+cmake ..
 make
 ```
 
-3. Link to your program
+3. Link the output library to your program
+
+e.g.
 ```bash
-nvcc -L/path/to/tsqr-tc/lib -I/path/to/tsqr-tc/include -ltsqr-tc ...
+nvcc -L/path/to/tsqr-tc/build -I/path/to/tsqr-tc/include -ltsqr-tc ...
 ```
 
 ## Sample code
