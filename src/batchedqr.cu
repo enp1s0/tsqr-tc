@@ -9,6 +9,7 @@
 
 #include <tsqr_tc/batchedqr.hpp>
 #include "utils.hpp"
+#include <tsqr_tc/detail/macro.hpp>
 
 //#define MTK_DEBUG
 //#define MTK_CLOCK_BREAKDOWN
@@ -199,7 +200,7 @@ __device__ void compute_w_hmma(
 		float* const smem_reduction_ptr,
 		const float* const smem_Y_ptr,
 		const float* const smem_t_ptr,
-		const std::size_t m, const std::size_t n, const std::size_t real_block_n
+		const std::size_t m, const std::size_t real_block_n
 		) {
 	constexpr unsigned frag_dim = warp_size;
 	// Compute YtY
@@ -238,7 +239,7 @@ __device__ void compute_w_notc(
 		float* const smem_reduction_ptr,
 		const float* const smem_Y_ptr,
 		const float* const smem_t_ptr,
-		const std::size_t m, const std::size_t n, const std::size_t real_block_n
+		const std::size_t m, const std::size_t real_block_n
 		) {
 	constexpr unsigned frag_dim = warp_size;
 	// Compute YtY
@@ -275,7 +276,7 @@ __device__ void compute_w(
 		typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_reduction_ptr,
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_Y_ptr,
 		const typename mtk::tsqr_tc::detail::get_type<compute_mode>::type* const smem_t_ptr,
-		const std::size_t m, const std::size_t n, const std::size_t real_block_n
+		const std::size_t m, const std::size_t real_block_n
 		) {
 	MTK_DEBUG_CALL_FUNC(printf("# --> %s\n", __func__));
 	if constexpr (compute_mode == mtk::tsqr_tc::compute_mode::fp32_no_tc) {
@@ -284,7 +285,7 @@ __device__ void compute_w(
 				smem_reduction_ptr,
 				smem_Y_ptr,
 				smem_t_ptr,
-				m, n, real_block_n
+				m, real_block_n
 				);
 	} else {
 		compute_w_hmma<compute_mode, smem_m, smem_n, smem_ldm>(
@@ -292,7 +293,7 @@ __device__ void compute_w(
 				smem_reduction_ptr,
 				smem_Y_ptr,
 				smem_t_ptr,
-				m, n, real_block_n
+				m, real_block_n
 				);
 	}
 	MTK_DEBUG_CALL_FUNC(printf("# <-- %s\n", __func__));
@@ -489,6 +490,7 @@ __device__ void update_a_hmma(
 		const std::size_t m, const std::size_t n,
 		const std::size_t real_block_n
 		) {
+	MTK_TSQR_TC_UNUSED(real_block_n);
 	constexpr unsigned frag_dim = warp_size;
 
 	if (n == 0) {
@@ -753,7 +755,7 @@ __device__ void qr_kernel(
 				smem_tmp_ptr,
 				smem_Y_ptr,
 				smem_t_ptr,
-				m, n_block, real_block_n
+				m, real_block_n
 				);
 		mtk::tsqr_tc::utils::copy_matrix_s2g<block_size, DIM_BLOCK_N, DIM_MAX_M>(gmem_w_ptr + ldw * n_block * DIM_BLOCK_N, ldw, smem_W_ptr, m, real_block_n);
 		MTK_DEBUG_PRINT_MATRIX(smem_W_ptr, m, real_block_n, DIM_MAX_M, "W (Block Result)");

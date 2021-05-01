@@ -7,6 +7,7 @@
 #include <wmma_extension/hmma_f32_f32.hpp>
 #include <gemm_core/gemm_core.hpp>
 #include "utils.hpp"
+#include <tsqr_tc/detail/macro.hpp>
 
 //#define MTK_DEBUG_DEVICE
 //#define MTK_DEBUG_HOST
@@ -233,6 +234,8 @@ __device__ void gemm_MxNxN_core_hmma(
 				mtk::wmma::mma_f32::fill_zero(frag_C);
 			}
 		} else {
+			MTK_TSQR_TC_UNUSED(gmem_C_ptr);
+			MTK_TSQR_TC_UNUSED(ld_C);
 			mtk::wmma::mma_f32::fill_zero(frag_C);
 		}
 		const auto real_m = min(DIM_BLOCK_M, m - bm);
@@ -253,7 +256,6 @@ __device__ void gemm_MxNxN_core_hmma(
 		MTK_DEBUG_PRINT_MATRIX(smem_A_ptr, real_m, n, DIM_BLOCK_M, "A block");
 		__syncthreads();
 		for (auto bk = decltype(DIM_N)(0); bk < DIM_N; bk += K_BLOCKING) {
-			const auto real_num_blockings = min(NUM_BLOCKINGS, (n - bk + DIM_TC - 1) / DIM_TC);
 			typename mtk::tsqr_tc::utils::select_fragment<compute_mode, nvcuda::wmma::matrix_b, DIM_BLOCK_M / DIM_TC * DIM_TC, DIM_TC, NUM_BLOCKINGS * DIM_TC, nvcuda::wmma::col_major>::type frag_B;
 			mtk::wmma::mma_f32::load_matrix_sync(frag_B, smem_B_ptr + cutf::thread::get_warp_id() * DIM_N * DIM_TC + bk, DIM_N);
 
@@ -356,10 +358,11 @@ __device__ void gemm_MxNxN_core_notc(
 				}
 			}
 		} else {
+			MTK_TSQR_TC_UNUSED(gmem_C_ptr);
+			MTK_TSQR_TC_UNUSED(ld_C);
 			for (unsigned i = 0; i < DIM_TC; i++) {
 				for (unsigned j = 0; j < DIM_BLOCK_M; j += warp_size) {
 					smem_A_ptr[cutf::thread::get_warp_id() * DIM_BLOCK_M * DIM_TC + j + (threadIdx.x & 0x1f) + i * DIM_BLOCK_M] = reg[i * DIM_BLOCK_M / warp_size + j / warp_size];
-					const auto index = cutf::thread::get_warp_id() * DIM_BLOCK_M * DIM_TC + j + (threadIdx.x & 0x1f) + i * DIM_BLOCK_M;
 				}
 			}
 		}
