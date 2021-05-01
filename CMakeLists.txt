@@ -1,44 +1,69 @@
-CMAKE_MINIMUM_REQUIRED(VERSION 3.18)
-PROJECT(tsqr-tc LANGUAGES CXX CUDA)
+cmake_minimum_required(VERSION 3.18)
+project(tsqr-tc LANGUAGES CXX CUDA)
 
-FIND_PACKAGE(CUDA 11.0 REQUIRED)
+find_package(CUDA 11.0 REQUIRED)
+find_package(CUDAToolkit REQUIRED)
+find_package(OpenMP)
 
 # CUDA/CXX
-FOREACH(lang CXX CUDA)
-    SET(CMAKE_${lang}_STANDARD          17)
-    SET(CMAKE_${lang}_STANDARD_REQUIRED ON)
-    SET(CMAKE_${lang}_EXTENSIONS        OFF)
-ENDFOREACH()
+foreach(lang CXX CUDA)
+    set(CMAKE_${lang}_STANDARD          17)
+    set(CMAKE_${lang}_STANDARD_REQUIRED ON)
+    set(CMAKE_${lang}_EXTENSIONS        OFF)
+endforeach()
 
 # CUDA (1/2)
 SET(CMAKE_CUDA_ARCHITECTURES 80 86)
 
-# OpenMP
-FIND_PACKAGE(OpenMP QUIET COMPONENTS CXX CUDA)
-
 # Directories
-SET(INCDIR include)
-SET(SRCDIR src)
-SET(LIBDIR lib)
+set(INCDIR include)
+set(SRCDIR src)
+set(LIBDIR lib)
+
+##########################################################################
+# Library
+##########################################################################
 
 # Source files
-FILE(GLOB SRCS "${SRCDIR}/*.cu")
-FILE(GLOB HEADERS "${INCDIR}/*.hpp")
+file(GLOB SRCS "${SRCDIR}/*.cu")
+file(GLOB HEADERS "${INCDIR}/*.hpp")
 
-ADD_LIBRARY(tsqr-tc STATIC
+add_library(tsqr-tc STATIC
 	${SRCS}
 	${HEADERS}
 	)
 
 # Include directories
-TARGET_INCLUDE_DIRECTORIES(tsqr-tc PUBLIC ${INCDIR})
-TARGET_INCLUDE_DIRECTORIES(tsqr-tc PUBLIC ${SRCDIR}/cutf/include)
-TARGET_INCLUDE_DIRECTORIES(tsqr-tc PUBLIC ${SRCDIR}/wmma_extension/include)
-TARGET_INCLUDE_DIRECTORIES(tsqr-tc PUBLIC ${SRCDIR}/hmma.f32.f32/include)
-TARGET_INCLUDE_DIRECTORIES(tsqr-tc PUBLIC ${SRCDIR}/gemm_core_cuh/include)
+target_include_directories(tsqr-tc PUBLIC ${INCDIR})
+target_include_directories(tsqr-tc PUBLIC ${SRCDIR}/cutf/include)
+target_include_directories(tsqr-tc PUBLIC ${SRCDIR}/wmma_extension/include)
+target_include_directories(tsqr-tc PUBLIC ${SRCDIR}/hmma.f32.f32/include)
+target_include_directories(tsqr-tc PUBLIC ${SRCDIR}/gemm_core_cuh/include)
 
 # CUDA (2/2)
-SET_TARGET_PROPERTIES(tsqr-tc PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+set_target_properties(tsqr-tc PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 
 # Output
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${LIBDIR})
+
+##########################################################################
+# Tests
+##########################################################################
+
+# Directory
+set(TESTSRCDIR test)
+
+foreach(test batchqr tsqr qr256x256)
+	set(test_out ${test}.test)
+	add_executable(${test_out} ${TESTSRCDIR}/${test}.cu ${TESTSRCDIR}/utils.cu)
+	target_include_directories(${test_out} PRIVATE ${INCDIR})
+	target_include_directories(${test_out} PRIVATE ${SRCDIR}/cutf/include)
+	target_link_libraries(${test_out} PRIVATE tsqr-tc)
+	target_link_libraries(${test_out} PRIVATE
+		CUDA::cublas
+		CUDA::cusolver
+		)
+	if (OpenMP_CXX_FOUND)
+		target_link_libraries(${test_out} PRIVATE OpenMP::OpenMP_CXX)
+	endif()
+endforeach()
