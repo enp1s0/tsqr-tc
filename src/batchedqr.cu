@@ -4,7 +4,7 @@
 #include <cutf/math.hpp>
 #include <cutf/thread.hpp>
 #include <wmma_extension/wmma_extension.hpp>
-#include <wmma_extension/hmma_f32_f32.hpp>
+#include <wmma_extension/mma_f32/tcec.hpp>
 #include <gemm_core/gemm_core.hpp>
 
 #include <tsqr_tc/batchedqr.hpp>
