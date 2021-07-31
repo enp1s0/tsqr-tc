@@ -157,7 +157,7 @@ __device__ void compute_reflection_1_hmma(
 		mtk::wmma::mma_f32::load_vector(frag_y, y_ptr);
 
 		auto A_ptr = smem_A_ptr + (threadIdx.x & 0xffffffe0u);
-		mtk::wmma::mma_f32::load_matrix_sync(frag_A, A_ptr + i * smem_n, smem_ldm, nvcuda::wmma::mem_col_major,false);
+		mtk::wmma::mma_f32::load_matrix_sync(frag_A, A_ptr + i * smem_n, smem_ldm, nvcuda::wmma::mem_col_major, false);
 
 		mtk::wmma::mma_f32::mma_sync(frag_A, frag_y, frag_tmp, frag_A);
 		mtk::wmma::mma_f32::store_matrix_sync(A_ptr + i * smem_n, frag_A, smem_ldm, nvcuda::wmma::mem_col_major);
