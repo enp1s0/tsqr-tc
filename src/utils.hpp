@@ -2,7 +2,7 @@
 #define __MTK_TSQR_TC_MATRIX_UTILS_HPP__
 #include <cutf/type.hpp>
 #include <tsqr_tc/detail/constant.hpp>
-#include <wmma_extension/hmma_f32_f32.hpp>
+#include <wmma_extension/mma_f32/tcec.hpp>
 
 namespace mtk {
 namespace tsqr_tc {
@@ -17,10 +17,10 @@ template <> struct fragment_type<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_c
 
 template <mtk::tsqr_tc::compute_mode::type compute_type>
 struct error_correction_type;
-template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor   > {using type = mtk::wmma::mma_f32::op_with_error_correction;};
-template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_no_cor> {using type = mtk::wmma::mma_f32::op_without_error_correction;};
-template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor   > {using type = mtk::wmma::mma_f32::op_with_error_correction;};
-template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor> {using type = mtk::wmma::mma_f32::op_without_error_correction;};
+template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor   > {using type = mtk::wmma::mma_f32::with_ec;};
+template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_no_cor> {using type = mtk::wmma::mma_f32::without_ec;};
+template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor   > {using type = mtk::wmma::mma_f32::with_ec;};
+template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor> {using type = mtk::wmma::mma_f32::without_ec;};
 
 template <mtk::tsqr_tc::compute_mode::type compute_type>
 constexpr unsigned min_fragment_n = 16;
