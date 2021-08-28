@@ -4,9 +4,6 @@
 [submodule "src/cutf"]
 	path = src/cutf
 	url = https://github.com/enp1s0/cutf
-[submodule "src/hmma.f32.f32"]
-	path = src/hmma.f32.f32
-	url = https://github.com/wmmae/hmma.f32.f32
 [submodule "src/gemm_core_cuh"]
 	path = src/gemm_core_cuh
 	url = https://github.com/enp1s0/gemm_core_cuh
