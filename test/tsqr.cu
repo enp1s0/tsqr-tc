@@ -112,7 +112,7 @@ void test_accuracy_cusolver(const std::size_t m, const std::size_t n, const unsi
 	double orthogonality = 0.;
 	double residual = 0.;
 
-	auto cusolver_handle = cutf::cusolver::get_cusolver_dn_unique_ptr();
+	auto cusolver_handle = cutf::cusolver::dn::get_handle_unique_ptr();
 
 	for (unsigned c = 0; c < test_count; c++) {
 		// initialize input matrix
