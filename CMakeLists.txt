@@ -63,6 +63,7 @@ foreach(test batchqr tsqr qr256x256)
 		CUDA::cublas
 		CUDA::cusolver
 		)
+	#target_link_libraries(${test_out} PRIVATE -lculip_cublas)
 	if (OpenMP_CXX_FOUND)
 		target_link_libraries(${test_out} PRIVATE OpenMP::OpenMP_CXX)
 	endif()
