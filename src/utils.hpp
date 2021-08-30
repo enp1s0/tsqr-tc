@@ -2,7 +2,7 @@
 #define __MTK_TSQR_TC_MATRIX_UTILS_HPP__
 #include <cutf/type.hpp>
 #include <tsqr_tc/detail/constant.hpp>
-#include <wmma_extension/mma_f32/tcec.hpp>
+#include <wmma_extension/tcec/tcec.hpp>
 
 namespace mtk {
 namespace tsqr_tc {
@@ -17,10 +17,10 @@ template <> struct fragment_type<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_c
 
 template <mtk::tsqr_tc::compute_mode::type compute_type>
 struct error_correction_type;
-template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor   > {using type = mtk::wmma::mma_f32::with_ec;};
-template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_no_cor> {using type = mtk::wmma::mma_f32::without_ec;};
-template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor   > {using type = mtk::wmma::mma_f32::with_ec;};
-template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor> {using type = mtk::wmma::mma_f32::without_ec;};
+template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_cor   > {using type = mtk::wmma::tcec::with_ec;};
+template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_fp16_hmma_no_cor> {using type = mtk::wmma::tcec::without_ec;};
+template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_cor   > {using type = mtk::wmma::tcec::with_ec;};
+template <> struct error_correction_type<mtk::tsqr_tc::compute_mode::fp32_tf32_hmma_no_cor> {using type = mtk::wmma::tcec::without_ec;};
 
 template <mtk::tsqr_tc::compute_mode::type compute_type>
 constexpr unsigned min_fragment_n = 16;
@@ -33,9 +33,9 @@ template <mtk::tsqr_tc::compute_mode::type compute_type, class Use, unsigned m, 
 struct select_fragment {
 	using ftype = typename mtk::tsqr_tc::utils::fragment_type<compute_type>::type;
 	using error_correction = typename mtk::tsqr_tc::utils::error_correction_type<compute_type>::type;
-	using policy = typename mtk::wmma::mma_f32::detail::default_policy<ftype, error_correction, mtk::wmma::mma_f32::op_wmma>::type;
+	using policy = typename mtk::wmma::tcec::detail::default_policy<ftype, error_correction, mtk::wmma::tcec::op_wmma>::type;
 	// fragment type
-	using type = mtk::wmma::mma_f32::fragment<Use, m, n, k, ftype, Layout, policy>;
+	using type = mtk::wmma::tcec::fragment<Use, m, n, k, ftype, Layout, policy>;
 };
 
 // This function accumulates vectors on shared memory.

@@ -396,7 +396,7 @@ void mtk::tsqr_tc::test_utils::qr_cublas<float>(
 
 template <class T>
 void mtk::tsqr_tc::test_utils::test_performance_cusolver(const std::size_t m, const std::size_t n, const unsigned test_count) {
-	auto cusolver_handle = cutf::cusolver::get_cusolver_dn_unique_ptr();
+	auto cusolver_handle = cutf::cusolver::dn::get_handle_unique_ptr();
 	auto hA_uptr = cutf::memory::get_host_unique_ptr<T>(m * n);
 
 	auto dA_uptr = cutf::memory::get_device_unique_ptr<T>(m * n);
