@@ -335,7 +335,7 @@ __device__ void compute_base_w_hmma(
 
 			mtk::wmma::tcec::load_matrix_sync(frag_Yt, smem_workspace_large_1_ptr + (threadIdx.x & 0xffffffe0u), smem_ldm, false);
 			mtk::wmma::tcec::mma_sync(frag_tmp, frag_Yt, frag_Yb);
-			mtk::wmma::tcec::store_matrix_sync_with_mul(smem_workspace_small_ptr + (threadIdx.x / warp_size) * smem_n * smem_n, frag_tmp, smem_n, -1.0f, nvcuda::wmma::mem_col_major, false);
+			mtk::wmma::tcec::store_matrix_sync_with_mul<nvcuda::wmma::col_major>(smem_workspace_small_ptr + (threadIdx.x / warp_size) * smem_n * smem_n, frag_tmp, smem_n, -1.0f, false);
 
 			// Accumulate
 			__syncthreads();
@@ -510,7 +510,7 @@ __device__ void update_a_hmma(
 
 			mtk::wmma::tcec::mma_sync(frag_tmp, frag_Wt, frag_A);
 
-			mtk::wmma::tcec::store_matrix_sync_with_mul(smem_workspace_small_ptr + (threadIdx.x / warp_size) * smem_n * smem_n, frag_tmp, smem_n, -1.0f, nvcuda::wmma::mem_col_major, false);
+			mtk::wmma::tcec::store_matrix_sync_with_mul<nvcuda::wmma::col_major>(smem_workspace_small_ptr + (threadIdx.x / warp_size) * smem_n * smem_n, frag_tmp, smem_n, -1.0f, false);
 
 			// Accumulate
 			__syncthreads();
