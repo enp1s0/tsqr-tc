@@ -53,11 +53,19 @@ void mtk::tsqr_tc::tsqr_buffer<compute_mode>::set_indices(cudaStream_t cuda_stre
 
 
 template <mtk::tsqr_tc::compute_mode::type compute_mode>
-void mtk::tsqr_tc::tsqr_buffer<compute_mode>::allocate() {
-	CUTF_CHECK_ERROR(cudaMalloc(&r_buffer_ptr, sizeof(typename mtk::tsqr_tc::tsqr_buffer<compute_mode>::buffer_type) * get_r_buffer_count()));
-	CUTF_CHECK_ERROR(cudaMalloc(&w_buffer_ptr, sizeof(typename mtk::tsqr_tc::tsqr_buffer<compute_mode>::buffer_type) * get_w_buffer_count()));
-	CUTF_CHECK_ERROR(cudaMalloc(&y_buffer_ptr, sizeof(typename mtk::tsqr_tc::tsqr_buffer<compute_mode>::buffer_type) * get_y_buffer_count()));
-	CUTF_CHECK_ERROR(cudaMalloc(&index_buffer_ptr, sizeof(std::size_t) * get_index_buffer_count()));
+void mtk::tsqr_tc::tsqr_buffer<compute_mode>::allocate(const wmem_alloc_location_t loc) {
+	this->malloc_location = loc;
+	if (loc == device) {
+		CUTF_CHECK_ERROR(cudaMalloc(&r_buffer_ptr, sizeof(typename mtk::tsqr_tc::tsqr_buffer<compute_mode>::buffer_type) * get_r_buffer_count()));
+		CUTF_CHECK_ERROR(cudaMalloc(&w_buffer_ptr, sizeof(typename mtk::tsqr_tc::tsqr_buffer<compute_mode>::buffer_type) * get_w_buffer_count()));
+		CUTF_CHECK_ERROR(cudaMalloc(&y_buffer_ptr, sizeof(typename mtk::tsqr_tc::tsqr_buffer<compute_mode>::buffer_type) * get_y_buffer_count()));
+		CUTF_CHECK_ERROR(cudaMalloc(&index_buffer_ptr, sizeof(std::size_t) * get_index_buffer_count()));
+	} else {
+		CUTF_CHECK_ERROR(cudaMallocHost(&r_buffer_ptr, sizeof(typename mtk::tsqr_tc::tsqr_buffer<compute_mode>::buffer_type) * get_r_buffer_count()));
+		CUTF_CHECK_ERROR(cudaMallocHost(&w_buffer_ptr, sizeof(typename mtk::tsqr_tc::tsqr_buffer<compute_mode>::buffer_type) * get_w_buffer_count()));
+		CUTF_CHECK_ERROR(cudaMallocHost(&y_buffer_ptr, sizeof(typename mtk::tsqr_tc::tsqr_buffer<compute_mode>::buffer_type) * get_y_buffer_count()));
+		CUTF_CHECK_ERROR(cudaMallocHost(&index_buffer_ptr, sizeof(std::size_t) * get_index_buffer_count()));
+	}
 	CUTF_CHECK_ERROR(cudaMallocHost(&index_buffer_host_ptr, sizeof(std::size_t) * get_index_buffer_count()));
 }
 
@@ -75,10 +83,17 @@ void mtk::tsqr_tc::tsqr_buffer<compute_mode>::free() {
 			ptr = nullptr;
 		}
 	};
-	free_func(r_buffer_ptr);
-	free_func(w_buffer_ptr);
-	free_func(y_buffer_ptr);
-	free_func(index_buffer_ptr);
+	if (this->malloc_location == device) {
+		free_func(r_buffer_ptr);
+		free_func(w_buffer_ptr);
+		free_func(y_buffer_ptr);
+		free_func(index_buffer_ptr);
+	} else {
+		free_host_func(r_buffer_ptr);
+		free_host_func(w_buffer_ptr);
+		free_host_func(y_buffer_ptr);
+		free_host_func(index_buffer_ptr);
+	}
 	free_host_func(index_buffer_host_ptr);
 }
 
