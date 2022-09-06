@@ -34,7 +34,7 @@ public:
 	void allocate(const wmem_alloc_location_t loc = device);
 	void free();
 
-	void set_indices(cudaStream_t cuda_stream);
+	void set_indices(cudaStream_t cuda_stream = 0);
 
 	buffer_type* get_r_buffer_ptr() const {return r_buffer_ptr;}
 	buffer_type* get_w_buffer_ptr() const {return w_buffer_ptr;}
